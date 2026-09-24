@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "preview": "npm --prefix frontend run preview",
+    "api": "uvicorn app.main:app --app-dir backend --reload",
+    "test": "pytest -q && npm --prefix frontend run test",
+    "e2e": "npm --prefix frontend run e2e"
+  }
+}

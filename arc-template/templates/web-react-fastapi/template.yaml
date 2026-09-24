@@ -1,0 +1,39 @@
+schema_version: "1.0"
+id: web-react-fastapi
+name: Web Application (React + FastAPI)
+type: web_app
+version: 1.0.0
+description: Full-stack React and FastAPI application template for generation agents.
+stack:
+  frontend:
+    framework: Vite
+    library: React
+    router: React Router
+    language: TypeScript
+    styling: TailwindCSS
+  backend:
+    framework: FastAPI
+    language: Python
+  tests:
+    backend: pytest
+    frontend: Vitest
+    e2e: Playwright
+copy:
+  exclude:
+    - template.yaml
+    - frontend/node_modules
+    - frontend/dist
+    - .venv
+    - .pytest_cache
+preview:
+  html: frontend/dist/index.html
+  fallback_html: frontend/preview.html
+  assets: frontend/dist/assets
+agent_guidance:
+  ui_root: frontend/src
+  api_root: backend/app/routes.py
+  function_root: backend/app
+  db_root: backend/app/repository.py
+  backend_test_root: backend/tests
+  frontend_test_root: frontend/src
+  e2e_test_root: frontend/e2e

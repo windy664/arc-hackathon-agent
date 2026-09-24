@@ -1,0 +1,31 @@
+schema_version: "1.0"
+id: cli-python
+name: Command-Line Application (Python)
+type: cli_app
+version: 1.0.0
+description: Python command-line application template for generation agents.
+stack:
+  runtime:
+    language: Python
+    minimum_version: "3.11"
+  cli:
+    framework: argparse
+  tests:
+    framework: unittest
+copy:
+  exclude:
+    - template.yaml
+    - __pycache__
+    - "*.py[cod]"
+    - .pytest_cache
+    - .mypy_cache
+    - .coverage
+    - coverage.xml
+agent_guidance:
+  app_root: app
+  source_root: app
+  entrypoint: app/__main__.py
+  test_root: tests
+  unit_test_root: tests/unit
+  integration_test_root: tests/integration
+  e2e_test_root: tests/e2e

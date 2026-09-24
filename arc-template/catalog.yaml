@@ -1,0 +1,49 @@
+schema_version: "1.0"
+templates:
+  - id: web-react-fastapi
+    name: Web Application (React + FastAPI)
+    type: web_app
+    version: 1.0.0
+    path: templates/web-react-fastapi
+    stack:
+      - Vite
+      - React
+      - React Router
+      - TypeScript
+      - TailwindCSS
+      - FastAPI
+      - pytest
+      - Vitest
+      - Playwright
+  - id: web-react-express
+    name: Web Application (React + Express)
+    type: web_app
+    version: 1.0.0
+    path: templates/web-react-express
+    stack:
+      - Vite
+      - React
+      - JavaScript
+      - Express
+      - SQLite
+      - Vitest
+      - Playwright
+  - id: mobile-android-java
+    name: Mobile Application (Android + Java)
+    type: mobile_app
+    version: 1.0.0
+    path: templates/mobile-android-java
+    stack:
+      - Android
+      - Java
+      - Gradle
+      - JUnit
+  - id: cli-python
+    name: Command-Line Application (Python)
+    type: cli_app
+    version: 1.0.0
+    path: templates/cli-python
+    stack:
+      - Python
+      - argparse
+      - unittest
