@@ -1,0 +1,38 @@
+name: Test ARC Agent
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    - name: Test agent entry point
+      run: |
+        python main.py --help || true
+    
+    - name: Validate structure
+      run: |
+        # 检查必要文件是否存在
+        test -f main.py
+        test -f arc_main.py
+        test -f requirements.txt
+        test -d agents
+        test -d core
+        test -d arc-template
+        echo "结构验证通过"
