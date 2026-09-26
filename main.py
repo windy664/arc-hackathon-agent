@@ -175,7 +175,43 @@ def generate_github_app(backend_dir, frontend_dir, seed_data):
         with open(full_path, 'w', encoding='utf-8') as f:
             f.write(content)
     
+    # 构建前端
+    build_frontend(frontend_dir)
+    
     print("[Hackathon Agent] GitHub application generated")
+
+def build_frontend(frontend_dir):
+    """构建前端"""
+    import subprocess
+    
+    print("[Hackathon Agent] Building frontend...")
+    
+    # 安装依赖
+    try:
+        subprocess.run(['npm', 'install'], cwd=str(frontend_dir), capture_output=True, check=True)
+        print("[Hackathon Agent] Frontend dependencies installed")
+    except subprocess.CalledProcessError as e:
+        print(f"[Hackathon Agent] Warning: npm install failed: {e}")
+        # 如果 npm 失败，尝试 pnpm
+        try:
+            subprocess.run(['pnpm', 'install'], cwd=str(frontend_dir), capture_output=True, check=True)
+            print("[Hackathon Agent] Frontend dependencies installed with pnpm")
+        except subprocess.CalledProcessError as e2:
+            print(f"[Hackathon Agent] Warning: pnpm install also failed: {e2}")
+            return
+    
+    # 构建
+    try:
+        subprocess.run(['npm', 'run', 'build'], cwd=str(frontend_dir), capture_output=True, check=True)
+        print("[Hackathon Agent] Frontend built successfully")
+    except subprocess.CalledProcessError as e:
+        print(f"[Hackathon Agent] Warning: npm build failed: {e}")
+        # 如果 npm 失败，尝试 pnpm
+        try:
+            subprocess.run(['pnpm', 'run', 'build'], cwd=str(frontend_dir), capture_output=True, check=True)
+            print("[Hackathon Agent] Frontend built with pnpm")
+        except subprocess.CalledProcessError as e2:
+            print(f"[Hackathon Agent] Warning: pnpm build also failed: {e2}")
 
 def generate_spreadsheet_app(backend_dir, frontend_dir, seed_data):
     """生成 Spreadsheet 应用"""
