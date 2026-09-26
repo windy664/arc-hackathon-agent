@@ -276,12 +276,13 @@ app.listen(port, () => {
         }, f, indent=2)
 
 def generate_github_backend(seed_data):
-    """生成 GitHub 后端代码"""
+    """生成 GitHub 后端代码 - 针对比赛需求优化"""
     accounts = seed_data.get('accounts', ['alice-dev'])
     emails = seed_data.get('emails', ['alice.dev@example.test'])
     passwords = seed_data.get('passwords', ['Valid-password-123!'])
     orgs = seed_data.get('organizations', ['Acme Demo'])
     repos = seed_data.get('repositories', ['acme-docs'])
+    branches = seed_data.get('branches', ['main', 'feature-search'])
     
     return f"""const express = require('express');
 const cors = require('cors');
@@ -294,28 +295,95 @@ app.use(express.json());
 
 const db = sqlite3(':memory:');
 
-// 创建表
+// 创建表 - 完整的 GitHub 数据模型
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
+    email_verified BOOLEAN DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    token TEXT UNIQUE NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE TABLE IF NOT EXISTS organizations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS org_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    role TEXT DEFAULT 'Member',
+    FOREIGN KEY (org_id) REFERENCES organizations(id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    UNIQUE(org_id, user_id)
   );
   CREATE TABLE IF NOT EXISTS repositories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     owner_id INTEGER,
+    org_id INTEGER,
     description TEXT,
     is_public BOOLEAN DEFAULT 1,
+    default_branch TEXT DEFAULT 'main',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (owner_id) REFERENCES users(id)
+    FOREIGN KEY (owner_id) REFERENCES users(id),
+    FOREIGN KEY (org_id) REFERENCES organizations(id)
   );
-  CREATE TABLE IF NOT EXISTS organizations (
+  CREATE TABLE IF NOT EXISTS branches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    repo_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (repo_id) REFERENCES repositories(id),
+    UNIQUE(repo_id, name)
+  );
+  CREATE TABLE IF NOT EXISTS issues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    author_id INTEGER NOT NULL,
+    state TEXT DEFAULT 'open',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (repo_id) REFERENCES repositories(id),
+    FOREIGN KEY (author_id) REFERENCES users(id)
+  );
+  CREATE TABLE IF NOT EXISTS pull_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    author_id INTEGER NOT NULL,
+    source_branch TEXT NOT NULL,
+    target_branch TEXT NOT NULL,
+    state TEXT DEFAULT 'open',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (repo_id) REFERENCES repositories(id),
+    FOREIGN KEY (author_id) REFERENCES users(id)
+  );
+  CREATE TABLE IF NOT EXISTS issue_labels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    issue_id INTEGER NOT NULL,
+    label TEXT NOT NULL,
+    FOREIGN KEY (issue_id) REFERENCES issues(id)
+  );
+  CREATE TABLE IF NOT EXISTS pr_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pr_id INTEGER NOT NULL,
+    reviewer_id INTEGER NOT NULL,
+    state TEXT DEFAULT 'pending',
+    FOREIGN KEY (pr_id) REFERENCES pull_requests(id),
+    FOREIGN KEY (reviewer_id) REFERENCES users(id)
   );
 `);
 
@@ -325,31 +393,66 @@ const seedEmails = {json.dumps(emails)};
 const seedPasswords = {json.dumps(passwords)};
 const seedOrgs = {json.dumps(orgs)};
 const seedRepos = {json.dumps(repos)};
+const seedBranches = {json.dumps(branches)};
 
 // 初始化种子数据
 function initSeedData() {{
+  // 创建用户
   for (let i = 0; i < seedAccounts.length; i++) {{
     const username = seedAccounts[i];
     const email = seedEmails[i] || `${{username}}@example.test`;
     const password = seedPasswords[0] || 'Valid-password-123!';
     try {{
-      db.prepare('INSERT OR IGNORE INTO users (username, email, password) VALUES (?, ?, ?)').run(username, email, password);
+      db.prepare('INSERT OR IGNORE INTO users (username, email, password, email_verified) VALUES (?, ?, ?, 1)').run(username, email, password);
       console.log(`[Seed] Created user: ${{username}}`);
     }} catch (e) {{}}
   }}
   
+  // 创建组织
   for (const orgName of seedOrgs) {{
     try {{
       db.prepare('INSERT OR IGNORE INTO organizations (name) VALUES (?)').run(orgName);
+      const org = db.prepare('SELECT id FROM organizations WHERE name = ?').get(orgName);
+      if (org) {{
+        // 添加组织成员
+        const owner = db.prepare('SELECT id FROM users WHERE username = ?').get(seedAccounts[0]);
+        if (owner) {{
+          db.prepare('INSERT OR IGNORE INTO org_members (org_id, user_id, role) VALUES (?, ?, ?)').run(org.id, owner.id, 'Owner');
+        }}
+      }}
       console.log(`[Seed] Created org: ${{orgName}}`);
     }} catch (e) {{}}
   }}
   
+  // 创建仓库
   const owner = db.prepare('SELECT id FROM users WHERE username = ?').get(seedAccounts[0]);
   if (owner) {{
     for (const repoName of seedRepos) {{
       try {{
-        db.prepare('INSERT OR IGNORE INTO repositories (name, owner_id, description) VALUES (?, ?, ?)').run(repoName, owner.id, `${{repoName}} repository`);
+        const org = db.prepare('SELECT id FROM organizations WHERE name = ?').get(seedOrgs[0]);
+        db.prepare('INSERT OR IGNORE INTO repositories (name, owner_id, org_id, description, is_public) VALUES (?, ?, ?, ?, ?)').run(
+          repoName, owner.id, org ? org.id : null, `${{repoName}} repository`, repoName !== 'secret-research' ? 1 : 0
+        );
+        const repo = db.prepare('SELECT id FROM repositories WHERE name = ?').get(repoName);
+        if (repo) {{
+          // 创建分支
+          for (const branch of seedBranches) {{
+            db.prepare('INSERT OR IGNORE INTO branches (repo_id, name) VALUES (?, ?)').run(repo.id, branch);
+          }}
+          // 创建示例 Issue
+          db.prepare('INSERT OR IGNORE INTO issues (repo_id, title, body, author_id, state) VALUES (?, ?, ?, ?, ?)').run(
+            repo.id, 'Improve onboarding', 'We need to improve the onboarding experience for new users.', owner.id, 'open'
+          );
+          const issue = db.prepare('SELECT id FROM issues WHERE repo_id = ? AND title = ?').get(repo.id, 'Improve onboarding');
+          if (issue) {{
+            db.prepare('INSERT OR IGNORE INTO issue_labels (issue_id, label) VALUES (?, ?)').run(issue.id, 'bug');
+            db.prepare('INSERT OR IGNORE INTO issue_labels (issue_id, label) VALUES (?, ?)').run(issue.id, 'documentation');
+          }}
+          // 创建示例 PR
+          db.prepare('INSERT OR IGNORE INTO pull_requests (repo_id, title, body, author_id, source_branch, target_branch, state) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+            repo.id, 'Fix search functionality', 'This PR fixes the search functionality.', owner.id, 'feature-search', 'main', 'open'
+          );
+        }}
         console.log(`[Seed] Created repo: ${{repoName}}`);
       }} catch (e) {{}}
     }}
@@ -358,37 +461,280 @@ function initSeedData() {{
 
 initSeedData();
 
+// 辅助函数
+function generateToken() {{
+  return Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+}}
+
+function validateUsername(username) {{
+  if (!username || username.length < 1 || username.length > 39) return false;
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(username);
+}}
+
+function validateEmail(email) {{
+  if (!email || email.length > 254) return false;
+  const parts = email.split('@');
+  if (parts.length !== 2) return false;
+  if (!parts[0] || !parts[1]) return false;
+  if (!parts[1].includes('.')) return false;
+  return true;
+}}
+
+function validatePassword(password) {{
+  if (!password || password.length < 12 || password.length > 128) return false;
+  if (/\s/.test(password)) return false;
+  if (!/[A-Z]/.test(password)) return false;
+  if (!/[a-z]/.test(password)) return false;
+  if (!/[0-9]/.test(password)) return false;
+  if (!/[^A-Za-z0-9]/.test(password)) return false;
+  return true;
+}}
+
 // API 路由
 app.get('/api/health', (req, res) => res.json({{ status: 'ok' }}));
 
+// 注册
 app.post('/api/register', (req, res) => {{
-  const {{ username, email, password }} = req.body;
+  const {{ username, email, password, confirm_password, terms }} = req.body;
+  const errors = {{}};
+  
+  if (!validateUsername(username)) errors.username = 'Username format is invalid';
+  if (!validateEmail(email)) errors.email = 'Email format is invalid';
+  if (!validatePassword(password)) errors.password = 'Password requirements are not satisfied';
+  if (password !== confirm_password) errors.confirm_password = 'Password confirmation does not match';
+  if (!terms) errors.terms = 'Agree to terms is required';
+  
+  // 检查重复
+  const existingUser = db.prepare('SELECT id FROM users WHERE username = ? OR email = ?').get(username, email);
+  if (existingUser) {{
+    if (existingUser.username === username) errors.username = 'Username already exists';
+    if (existingUser.email === email) errors.email = 'Email already exists';
+  }}
+  
+  if (Object.keys(errors).length > 0) {{
+    return res.status(400).json({{ success: false, errors }});
+  }}
+  
   try {{
-    const result = db.prepare('INSERT INTO users (username, email, password) VALUES (?, ?, ?)').run(username, email, password);
+    const result = db.prepare('INSERT INTO users (username, email, password, email_verified) VALUES (?, ?, ?, 1)').run(username, email, password);
     res.json({{ success: true, userId: result.lastInsertRowid }});
+  }} catch (err) {{
+    res.status(400).json({{ success: false, errors: {{ general: err.message }} }});
+  }}
+}});
+
+// 登录
+app.post('/api/login', (req, res) => {{
+  const {{ username, password }} = req.body;
+  const user = db.prepare('SELECT * FROM users WHERE (username = ? OR email = ?) AND password = ?').get(username, username, password);
+  if (user) {{
+    const token = generateToken();
+    db.prepare('INSERT INTO sessions (user_id, token) VALUES (?, ?)').run(user.id, token);
+    res.json({{ success: true, user: {{ id: user.id, username: user.username, email: user.email }}, token }});
+  }} else {{
+    res.status(401).json({{ success: false, error: 'Invalid credentials' }});
+  }}
+}});
+
+// 密码恢复
+app.post('/api/recover', (req, res) => {{
+  const {{ email }} = req.body;
+  const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  // 总是返回成功，不泄露邮箱是否存在
+  res.json({{ success: true, code: '123456' }});
+}});
+
+app.post('/api/reset-password', (req, res) => {{
+  const {{ email, code, new_password, confirm_password }} = req.body;
+  const errors = {{}};
+  
+  if (code !== '123456') errors.code = 'Verification code is invalid';
+  if (!validatePassword(new_password)) errors.new_password = 'Password requirements are not satisfied';
+  if (new_password !== confirm_password) errors.confirm_password = 'Password confirmation does not match';
+  
+  if (Object.keys(errors).length > 0) {{
+    return res.status(400).json({{ success: false, errors }});
+  }}
+  
+  const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  if (!user) {{
+    return res.json({{ success: true }}); // 不泄露邮箱是否存在
+  }}
+  
+  db.prepare('UPDATE users SET password = ? WHERE id = ?').run(new_password, user.id);
+  res.json({{ success: true, message: 'Password updated' }});
+}});
+
+// 退出登录
+app.post('/api/logout', (req, res) => {{
+  const {{ token }} = req.body;
+  db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+  res.json({{ success: true }});
+}});
+
+// 获取当前用户
+app.get('/api/me', (req, res) => {{
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) return res.status(401).json({{ error: 'Not authenticated' }});
+  const session = db.prepare('SELECT u.* FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ?').get(token);
+  if (!session) return res.status(401).json({{ error: 'Not authenticated' }});
+  res.json({{ id: session.id, username: session.username, email: session.email }});
+}});
+
+// 组织 API
+app.get('/api/orgs', (req, res) => {{
+  const orgs = db.prepare('SELECT * FROM organizations').all();
+  res.json(orgs);
+}});
+
+app.get('/api/orgs/:name', (req, res) => {{
+  const org = db.prepare('SELECT * FROM organizations WHERE name = ?').get(req.params.name);
+  if (!org) return res.status(404).json({{ error: 'Not found' }});
+  const members = db.prepare('SELECT u.username, om.role FROM org_members om JOIN users u ON om.user_id = u.id WHERE om.org_id = ?').all(org.id);
+  const repos = db.prepare('SELECT * FROM repositories WHERE org_id = ?').all(org.id);
+  res.json({{ ...org, members, repositories: repos }});
+}});
+
+// 仓库 API
+app.get('/api/repos', (req, res) => {{
+  const repos = db.prepare(`
+    SELECT r.*, u.username as owner_name,
+    CASE WHEN r.org_id IS NOT NULL THEN (SELECT name FROM organizations WHERE id = r.org_id) ELSE NULL END as org_name
+    FROM repositories r JOIN users u ON r.owner_id = u.id
+  `).all();
+  res.json(repos);
+}});
+
+app.get('/api/repos/:owner/:name', (req, res) => {{
+  const repo = db.prepare(`
+    SELECT r.*, u.username as owner_name
+    FROM repositories r JOIN users u ON r.owner_id = u.id
+    WHERE u.username = ? AND r.name = ?
+  `).get(req.params.owner, req.params.name);
+  if (!repo) return res.status(404).json({{ error: 'Not found' }});
+  const branches = db.prepare('SELECT * FROM branches WHERE repo_id = ?').all(repo.id);
+  res.json({{ ...repo, branches }});
+}});
+
+app.post('/api/repos', (req, res) => {{
+  const {{ name, description, is_public }} = req.body;
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const session = db.prepare('SELECT user_id FROM sessions WHERE token = ?').get(token);
+  if (!session) return res.status(401).json({{ error: 'Not authenticated' }});
+  
+  try {{
+    const result = db.prepare('INSERT INTO repositories (name, owner_id, description, is_public) VALUES (?, ?, ?, ?)').run(
+      name, session.user_id, description || '', is_public !== false ? 1 : 0
+    );
+    db.prepare('INSERT INTO branches (repo_id, name) VALUES (?, ?)').run(result.lastInsertRowid, 'main');
+    res.json({{ success: true, repoId: result.lastInsertRowid }});
   }} catch (err) {{
     res.status(400).json({{ error: err.message }});
   }}
 }});
 
-app.post('/api/login', (req, res) => {{
-  const {{ username, password }} = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE (username = ? OR email = ?) AND password = ?').get(username, username, password);
-  if (user) {{
-    res.json({{ success: true, user: {{ id: user.id, username: user.username }} }});
-  }} else {{
-    res.status(401).json({{ error: 'Invalid credentials' }});
+// Issue API
+app.get('/api/repos/:owner/:name/issues', (req, res) => {{
+  const repo = db.prepare(`
+    SELECT r.id FROM repositories r JOIN users u ON r.owner_id = u.id
+    WHERE u.username = ? AND r.name = ?
+  `).get(req.params.owner, req.params.name);
+  if (!repo) return res.status(404).json({{ error: 'Not found' }});
+  
+  const issues = db.prepare(`
+    SELECT i.*, u.username as author_name
+    FROM issues i JOIN users u ON i.author_id = u.id
+    WHERE i.repo_id = ?
+  `).all(repo.id);
+  
+  for (const issue of issues) {{
+    issue.labels = db.prepare('SELECT label FROM issue_labels WHERE issue_id = ?').all(issue.id).map(r => r.label);
+  }}
+  
+  res.json(issues);
+}});
+
+app.post('/api/repos/:owner/:name/issues', (req, res) => {{
+  const {{ title, body, labels }} = req.body;
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const session = db.prepare('SELECT user_id FROM sessions WHERE token = ?').get(token);
+  if (!session) return res.status(401).json({{ error: 'Not authenticated' }});
+  
+  const repo = db.prepare(`
+    SELECT r.id FROM repositories r JOIN users u ON r.owner_id = u.id
+    WHERE u.username = ? AND r.name = ?
+  `).get(req.params.owner, req.params.name);
+  if (!repo) return res.status(404).json({{ error: 'Not found' }});
+  
+  try {{
+    const result = db.prepare('INSERT INTO issues (repo_id, title, body, author_id) VALUES (?, ?, ?, ?)').run(
+      repo.id, title, body || '', session.user_id
+    );
+    if (labels) {{
+      for (const label of labels) {{
+        db.prepare('INSERT INTO issue_labels (issue_id, label) VALUES (?, ?)').run(result.lastInsertRowid, label);
+      }}
+    }}
+    res.json({{ success: true, issueId: result.lastInsertRowid }});
+  }} catch (err) {{
+    res.status(400).json({{ error: err.message }});
   }}
 }});
 
-app.get('/api/repos', (req, res) => {{
-  const repos = db.prepare('SELECT r.*, u.username as owner FROM repositories r JOIN users u ON r.owner_id = u.id').all();
-  res.json(repos);
+// PR API
+app.get('/api/repos/:owner/:name/pulls', (req, res) => {{
+  const repo = db.prepare(`
+    SELECT r.id FROM repositories r JOIN users u ON r.owner_id = u.id
+    WHERE u.username = ? AND r.name = ?
+  `).get(req.params.owner, req.params.name);
+  if (!repo) return res.status(404).json({{ error: 'Not found' }});
+  
+  const prs = db.prepare(`
+    SELECT pr.*, u.username as author_name
+    FROM pull_requests pr JOIN users u ON pr.author_id = u.id
+    WHERE pr.repo_id = ?
+  `).all(repo.id);
+  
+  res.json(prs);
 }});
 
-app.get('/api/orgs', (req, res) => {{
-  const orgs = db.prepare('SELECT * FROM organizations').all();
-  res.json(orgs);
+app.post('/api/repos/:owner/:name/pulls', (req, res) => {{
+  const {{ title, body, source_branch, target_branch }} = req.body;
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const session = db.prepare('SELECT user_id FROM sessions WHERE token = ?').get(token);
+  if (!session) return res.status(401).json({{ error: 'Not authenticated' }});
+  
+  const repo = db.prepare(`
+    SELECT r.id FROM repositories r JOIN users u ON r.owner_id = u.id
+    WHERE u.username = ? AND r.name = ?
+  `).get(req.params.owner, req.params.name);
+  if (!repo) return res.status(404).json({{ error: 'Not found' }});
+  
+  try {{
+    const result = db.prepare('INSERT INTO pull_requests (repo_id, title, body, author_id, source_branch, target_branch) VALUES (?, ?, ?, ?, ?, ?)').run(
+      repo.id, title, body || '', session.user_id, source_branch, target_branch
+    );
+    res.json({{ success: true, prId: result.lastInsertRowid }});
+  }} catch (err) {{
+    res.status(400).json({{ error: err.message }});
+  }}
+}});
+
+// PR Review API
+app.post('/api/pulls/:id/review', (req, res) => {{
+  const {{ state }} = req.body;
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const session = db.prepare('SELECT user_id FROM sessions WHERE token = ?').get(token);
+  if (!session) return res.status(401).json({{ error: 'Not authenticated' }});
+  
+  try {{
+    db.prepare('INSERT OR REPLACE INTO pr_reviews (pr_id, reviewer_id, state) VALUES (?, ?, ?)').run(
+      req.params.id, session.user_id, state
+    );
+    res.json({{ success: true }});
+  }} catch (err) {{
+    res.status(400).json({{ error: err.message }});
+  }}
 }});
 
 // 静态文件
