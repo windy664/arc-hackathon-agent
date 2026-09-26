@@ -960,6 +960,13 @@ export default function LoginPage({ setUser }: { setUser: (u: any) => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [showRecover, setShowRecover] = useState(false)
+  const [recoverEmail, setRecoverEmail] = useState('')
+  const [recoverCode, setRecoverCode] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [recoverStep, setRecoverStep] = useState(1)
+  const [recoverMessage, setRecoverMessage] = useState('')
   const navigate = useNavigate()
 
   const handleLogin = async () => {
@@ -970,6 +977,65 @@ export default function LoginPage({ setUser }: { setUser: (u: any) => void }) {
     } else {
       setError(data.error || 'Invalid credentials')
     }
+  }
+
+  const handleRecover = async () => {
+    if (recoverStep === 1) {
+      const data = await apiPost('/recover', { email: recoverEmail })
+      if (data.success) {
+        setRecoverStep(2)
+        setRecoverMessage('')
+      }
+    } else {
+      const data = await apiPost('/reset-password', { 
+        email: recoverEmail, 
+        code: recoverCode, 
+        new_password: newPassword, 
+        confirm_password: confirmPassword 
+      })
+      if (data.success) {
+        setRecoverMessage('Password updated')
+        setTimeout(() => setShowRecover(false), 2000)
+      } else {
+        setRecoverMessage(data.errors?.code || data.errors?.new_password || 'Error')
+      }
+    }
+  }
+
+  if (showRecover) {
+    return (
+      <div className="card" style={{ maxWidth: 400, margin: '0 auto' }}>
+        <h2>Reset password</h2>
+        {recoverStep === 1 ? (
+          <>
+            <div className="form-group">
+              <label htmlFor="recover-email">Email</label>
+              <input id="recover-email" type="email" value={recoverEmail} onChange={e => setRecoverEmail(e.target.value)} style={{ width: '100%' }} />
+            </div>
+            <button className="btn" onClick={handleRecover}>Send reset link</button>
+          </>
+        ) : (
+          <>
+            <p style={{ marginBottom: 16 }}>Verification code: <strong>123456</strong></p>
+            <div className="form-group">
+              <label htmlFor="recover-code">Verification code</label>
+              <input id="recover-code" type="text" value={recoverCode} onChange={e => setRecoverCode(e.target.value)} style={{ width: '100%' }} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="new-password">New password</label>
+              <input id="new-password" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} style={{ width: '100%' }} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="confirm-password">Confirm password</label>
+              <input id="confirm-password" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} style={{ width: '100%' }} />
+            </div>
+            <button className="btn" onClick={handleRecover}>Reset password</button>
+          </>
+        )}
+        {recoverMessage && <p className={recoverMessage === 'Password updated' ? 'success' : 'error'}>{recoverMessage}</p>}
+        <p style={{ marginTop: 16 }}><a href="#" onClick={() => setShowRecover(false)}>Back to sign in</a></p>
+      </div>
+    )
   }
 
   return (
@@ -987,6 +1053,8 @@ export default function LoginPage({ setUser }: { setUser: (u: any) => void }) {
       <button className="btn" onClick={handleLogin}>Sign in</button>
       <p style={{ marginTop: 16 }}>
         <Link to="/register">Create an account</Link>
+        {' | '}
+        <a href="#" onClick={() => setShowRecover(true)}>Forgot password</a>
       </p>
     </div>
   )
