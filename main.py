@@ -167,16 +167,13 @@ def generate_github_app(backend_dir, frontend_dir, seed_data):
     with open(backend_dir / 'src' / 'index.js', 'w') as f:
         f.write(generate_github_backend(seed_data))
     
-    # 前端
-    with open(frontend_dir / 'index.html', 'w') as f:
-        f.write(generate_github_frontend(seed_data))
-    
-    with open(frontend_dir / 'package.json', 'w') as f:
-        json.dump({
-            "name": "github-frontend",
-            "version": "1.0.0",
-            "scripts": {"build": "mkdir -p dist && cp *.html dist/"}
-        }, f, indent=2)
+    # 前端 - React + TypeScript
+    frontend_files = generate_github_frontend(seed_data)
+    for file_path, content in frontend_files.items():
+        full_path = frontend_dir / file_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(content)
     
     print("[Hackathon Agent] GitHub application generated")
 
@@ -751,179 +748,436 @@ app.listen(port, () => {{
 """
 
 def generate_github_frontend(seed_data):
-    """生成 GitHub 前端"""
+    """生成 GitHub 前端 - React + TypeScript + Vite"""
     accounts = seed_data.get('accounts', ['alice-dev'])
     repos = seed_data.get('repositories', ['acme-docs'])
     
-    return f"""<!DOCTYPE html>
+    # 返回多个文件的内容
+    files = {}
+    
+    # package.json
+    files['package.json'] = json.dumps({
+        "name": "frontend",
+        "private": True,
+        "version": "0.0.0",
+        "type": "module",
+        "scripts": {
+            "dev": "vite",
+            "build": "vite build",
+            "preview": "vite preview"
+        },
+        "dependencies": {
+            "react": "^19.2.0",
+            "react-dom": "^19.2.0",
+            "react-router-dom": "^7.11.0"
+        },
+        "devDependencies": {
+            "@types/react": "^19.2.5",
+            "@types/react-dom": "^19.2.3",
+            "@vitejs/plugin-react": "^5.1.1",
+            "vite": "^7.2.4"
+        }
+    }, indent=2)
+    
+    # vite.config.js
+    files['vite.config.js'] = """import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      '/api': 'http://localhost:3301'
+    }
+  }
+})
+"""
+    
+    # index.html
+    files['index.html'] = """<!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GitHub Collaboration Platform</title>
-  <style>
-    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: #f6f8fa; }}
-    .header {{ background: #24292f; color: white; padding: 16px 24px; }}
-    .header h1 {{ font-size: 20px; }}
-    .container {{ max-width: 1200px; margin: 0 auto; padding: 24px; }}
-    .card {{ background: white; border: 1px solid #d0d7de; border-radius: 6px; padding: 16px; margin-bottom: 16px; }}
-    .btn {{ display: inline-block; padding: 5px 16px; background: #2da44e; color: white; border: 1px solid rgba(27,31,36,0.15); border-radius: 6px; cursor: pointer; font-size: 14px; }}
-    .btn:hover {{ background: #2c974b; }}
-    .btn-outline {{ background: white; color: #24292f; border-color: #d0d7de; }}
-    input {{ padding: 5px 12px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 14px; width: 250px; }}
-    .form-group {{ margin-bottom: 16px; }}
-    label {{ display: block; font-weight: 600; margin-bottom: 4px; }}
-    .error {{ color: #cf222e; font-size: 12px; margin-top: 4px; }}
-    .repo-list {{ list-style: none; }}
-    .repo-list li {{ padding: 16px; border-bottom: 1px solid #d0d7de; }}
-    .repo-list li:last-child {{ border-bottom: none; }}
-    .repo-name {{ font-size: 20px; color: #0969da; text-decoration: none; font-weight: 600; }}
-  </style>
-</head>
-<body>
-  <header class="header">
-    <h1>GitHub</h1>
-  </header>
-  <div class="container">
-    <div id="auth-section">
-      <div class="card">
-        <h2>Sign in</h2>
-        <div class="form-group">
-          <label for="username">Username or email</label>
-          <input type="text" id="username" name="username">
-        </div>
-        <div class="form-group">
-          <label for="password">Password</label>
-          <input type="password" id="password" name="password">
-        </div>
-        <button class="btn" onclick="login()">Sign in</button>
-        <p id="login-error" class="error"></p>
-        <p style="margin-top: 16px"><a href="#" onclick="showRegister()">Create an account</a></p>
-      </div>
-    </div>
-    
-    <div id="register-section" style="display: none;">
-      <div class="card">
-        <h2>Create an account</h2>
-        <div class="form-group">
-          <label for="reg-username">Username</label>
-          <input type="text" id="reg-username" name="username">
-        </div>
-        <div class="form-group">
-          <label for="reg-email">Email</label>
-          <input type="email" id="reg-email" name="email">
-        </div>
-        <div class="form-group">
-          <label for="reg-password">Password</label>
-          <input type="password" id="reg-password" name="password">
-        </div>
-        <div class="form-group">
-          <label for="reg-confirm">Confirm password</label>
-          <input type="password" id="reg-confirm" name="confirm_password">
-        </div>
-        <div class="form-group">
-          <input type="checkbox" id="terms" name="terms">
-          <label for="terms" style="display: inline">Agree to the terms</label>
-        </div>
-        <button class="btn" onclick="register()">Create account</button>
-        <p id="reg-error" class="error"></p>
-      </div>
-    </div>
-    
-    <div id="dashboard" style="display: none;">
-      <div class="card">
-        <h2>Repositories</h2>
-        <input type="text" placeholder="Find a repository..." id="repo-search">
-        <ul class="repo-list" id="repo-list"></ul>
-      </div>
-    </div>
-  </div>
-  
-  <script>
-    let currentUser = null;
-    
-    async function login() {{
-      const username = document.getElementById('username').value;
-      const password = document.getElementById('password').value;
-      
-      const res = await fetch('/api/login', {{
-        method: 'POST',
-        headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{ username, password }})
-      }});
-      
-      const data = await res.json();
-      if (data.success) {{
-        currentUser = data.user;
-        showDashboard();
-      }} else {{
-        document.getElementById('login-error').textContent = 'Invalid credentials';
-      }}
-    }}
-    
-    async function register() {{
-      const username = document.getElementById('reg-username').value;
-      const email = document.getElementById('reg-email').value;
-      const password = document.getElementById('reg-password').value;
-      const confirm = document.getElementById('reg-confirm').value;
-      const terms = document.getElementById('terms').checked;
-      
-      if (password !== confirm) {{
-        document.getElementById('reg-error').textContent = 'Password confirmation does not match';
-        return;
-      }}
-      if (!terms) {{
-        document.getElementById('reg-error').textContent = 'Agree to terms is required';
-        return;
-      }}
-      
-      const res = await fetch('/api/register', {{
-        method: 'POST',
-        headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{ username, email, password }})
-      }});
-      
-      const data = await res.json();
-      if (data.success) {{
-        showLogin();
-      }} else {{
-        document.getElementById('reg-error').textContent = data.error;
-      }}
-    }}
-    
-    function showLogin() {{
-      document.getElementById('auth-section').style.display = 'block';
-      document.getElementById('register-section').style.display = 'none';
-      document.getElementById('dashboard').style.display = 'none';
-    }}
-    
-    function showRegister() {{
-      document.getElementById('auth-section').style.display = 'none';
-      document.getElementById('register-section').style.display = 'block';
-      document.getElementById('dashboard').style.display = 'none';
-    }}
-    
-    async function showDashboard() {{
-      document.getElementById('auth-section').style.display = 'none';
-      document.getElementById('register-section').style.display = 'none';
-      document.getElementById('dashboard').style.display = 'block';
-      
-      const res = await fetch('/api/repos');
-      const repos = await res.json();
-      
-      const list = document.getElementById('repo-list');
-      list.innerHTML = repos.map(r => `
-        <li>
-          <a class="repo-name" href="#">{{ '${{r.owner}}/${{r.name}}' }}</a>
-          <p>${{r.description || ''}}</p>
-        </li>
-      `).join('');
-    }}
-  </script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitHub Collaboration Platform</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
 """
+    
+    # src/main.tsx
+    files['src/main.tsx'] = """import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>,
+)
+"""
+    
+    # src/index.css
+    files['src/index.css'] = """* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: #f6f8fa; }
+.header { background: #24292f; color: white; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 20px; }
+.container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+.card { background: white; border: 1px solid #d0d7de; border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+.btn { display: inline-block; padding: 5px 16px; background: #2da44e; color: white; border: 1px solid rgba(27,31,36,0.15); border-radius: 6px; cursor: pointer; font-size: 14px; text-decoration: none; }
+.btn:hover { background: #2c974b; }
+.btn-outline { background: white; color: #24292f; border-color: #d0d7de; }
+input { padding: 5px 12px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 14px; }
+.form-group { margin-bottom: 16px; }
+label { display: block; font-weight: 600; margin-bottom: 4px; }
+.error { color: #cf222e; font-size: 12px; margin-top: 4px; }
+.success { color: #2da44e; font-size: 12px; margin-top: 4px; }
+.nav-link { color: white; text-decoration: none; margin-left: 16px; }
+.nav-link:hover { text-decoration: underline; }
+"""
+    
+    # src/App.tsx
+    files['src/App.tsx'] = """import { Routes, Route, Link } from 'react-router-dom'
+import { useState } from 'react'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import DashboardPage from './pages/DashboardPage'
+import ReposPage from './pages/ReposPage'
+import RepoDetailPage from './pages/RepoDetailPage'
+import OrgsPage from './pages/OrgsPage'
+
+function App() {
+  const [user, setUser] = useState<any>(null)
+
+  return (
+    <div>
+      <header className="header">
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <h1>GitHub</h1>
+          {user && (
+            <nav style={{ marginLeft: 32 }}>
+              <Link to="/" className="nav-link">Dashboard</Link>
+              <Link to="/repos" className="nav-link">Repositories</Link>
+              <Link to="/orgs" className="nav-link">Organizations</Link>
+            </nav>
+          )}
+        </div>
+        <div>
+          {user ? (
+            <span style={{ color: 'white' }}>
+              {user.username}
+              <button className="btn btn-outline" style={{ marginLeft: 8 }} onClick={() => setUser(null)}>Sign out</button>
+            </span>
+          ) : (
+            <Link to="/login" className="btn">Sign in</Link>
+          )}
+        </div>
+      </header>
+      <div className="container">
+        <Routes>
+          <Route path="/" element={<DashboardPage user={user} />} />
+          <Route path="/login" element={<LoginPage setUser={setUser} />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/repos" element={<ReposPage user={user} />} />
+          <Route path="/repos/:owner/:name" element={<RepoDetailPage user={user} />} />
+          <Route path="/orgs" element={<OrgsPage />} />
+        </Routes>
+      </div>
+    </div>
+  )
+}
+
+export default App
+"""
+    
+    # src/api/index.ts
+    files['src/api/index.ts'] = """const BASE_URL = '/api'
+
+export async function apiGet(path: string) {
+  const res = await fetch(`${BASE_URL}${path}`)
+  return res.json()
+}
+
+export async function apiPost(path: string, data: any) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  return res.json()
+}
+"""
+    
+    # src/pages/LoginPage.tsx
+    files['src/pages/LoginPage.tsx'] = """import { useState } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { apiPost } from '../api'
+
+export default function LoginPage({ setUser }: { setUser: (u: any) => void }) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const navigate = useNavigate()
+
+  const handleLogin = async () => {
+    const data = await apiPost('/login', { username, password })
+    if (data.success) {
+      setUser(data.user)
+      navigate('/')
+    } else {
+      setError(data.error || 'Invalid credentials')
+    }
+  }
+
+  return (
+    <div className="card" style={{ maxWidth: 400, margin: '0 auto' }}>
+      <h2>Sign in</h2>
+      <div className="form-group">
+        <label htmlFor="username">Username or email</label>
+        <input id="username" type="text" value={username} onChange={e => setUsername(e.target.value)} style={{ width: '100%' }} />
+      </div>
+      <div className="form-group">
+        <label htmlFor="password">Password</label>
+        <input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%' }} />
+      </div>
+      {error && <p className="error">{error}</p>}
+      <button className="btn" onClick={handleLogin}>Sign in</button>
+      <p style={{ marginTop: 16 }}>
+        <Link to="/register">Create an account</Link>
+      </p>
+    </div>
+  )
+}
+"""
+    
+    # src/pages/RegisterPage.tsx
+    files['src/pages/RegisterPage.tsx'] = """import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { apiPost } from '../api'
+
+export default function RegisterPage() {
+  const [form, setForm] = useState({ username: '', email: '', password: '', confirm_password: '', terms: false })
+  const [errors, setErrors] = useState<any>({})
+  const navigate = useNavigate()
+
+  const update = (field: string, value: any) => setForm(prev => ({ ...prev, [field]: value }))
+
+  const handleRegister = async () => {
+    const data = await apiPost('/register', form)
+    if (data.success) {
+      navigate('/login')
+    } else {
+      setErrors(data.errors || {})
+    }
+  }
+
+  return (
+    <div className="card" style={{ maxWidth: 400, margin: '0 auto' }}>
+      <h2>Create an account</h2>
+      <div className="form-group">
+        <label htmlFor="reg-username">Username</label>
+        <input id="reg-username" type="text" value={form.username} onChange={e => update('username', e.target.value)} style={{ width: '100%' }} />
+        {errors.username && <p className="error">{errors.username}</p>}
+      </div>
+      <div className="form-group">
+        <label htmlFor="reg-email">Email</label>
+        <input id="reg-email" type="email" value={form.email} onChange={e => update('email', e.target.value)} style={{ width: '100%' }} />
+        {errors.email && <p className="error">{errors.email}</p>}
+      </div>
+      <div className="form-group">
+        <label htmlFor="reg-password">Password</label>
+        <input id="reg-password" type="password" value={form.password} onChange={e => update('password', e.target.value)} style={{ width: '100%' }} />
+        {errors.password && <p className="error">{errors.password}</p>}
+      </div>
+      <div className="form-group">
+        <label htmlFor="reg-confirm">Confirm password</label>
+        <input id="reg-confirm" type="password" value={form.confirm_password} onChange={e => update('confirm_password', e.target.value)} style={{ width: '100%' }} />
+        {errors.confirm_password && <p className="error">{errors.confirm_password}</p>}
+      </div>
+      <div className="form-group">
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="checkbox" checked={form.terms} onChange={e => update('terms', e.target.checked)} />
+          Agree to the terms
+        </label>
+        {errors.terms && <p className="error">{errors.terms}</p>}
+      </div>
+      <button className="btn" onClick={handleRegister}>Create account</button>
+    </div>
+  )
+}
+"""
+    
+    # src/pages/DashboardPage.tsx
+    files['src/pages/DashboardPage.tsx'] = """import { Link } from 'react-router-dom'
+
+export default function DashboardPage({ user }: { user: any }) {
+  if (!user) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: 48 }}>
+        <h2>Welcome to GitHub</h2>
+        <p style={{ margin: '16px 0' }}>Sign in to access your repositories and organizations.</p>
+        <Link to="/login" className="btn">Sign in</Link>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <h2>Welcome, {user.username}!</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+        <div className="card">
+          <h3>Repositories</h3>
+          <p>View and manage your repositories.</p>
+          <Link to="/repos" className="btn" style={{ marginTop: 8 }}>View repositories</Link>
+        </div>
+        <div className="card">
+          <h3>Organizations</h3>
+          <p>View your organizations.</p>
+          <Link to="/orgs" className="btn" style={{ marginTop: 8 }}>View organizations</Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+"""
+    
+    # src/pages/ReposPage.tsx
+    files['src/pages/ReposPage.tsx'] = """import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
+import { apiGet } from '../api'
+
+export default function ReposPage({ user }: { user: any }) {
+  const [repos, setRepos] = useState<any[]>([])
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    apiGet('/repos').then(setRepos)
+  }, [])
+
+  const filtered = repos.filter(r => r.name.toLowerCase().includes(search.toLowerCase()))
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h2>Repositories</h2>
+        {user && <Link to="/repos/new" className="btn">New repository</Link>}
+      </div>
+      <input
+        type="text"
+        placeholder="Find a repository..."
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        style={{ width: '100%', marginBottom: 16 }}
+      />
+      <ul style={{ listStyle: 'none' }}>
+        {filtered.map(repo => (
+          <li key={repo.id} style={{ padding: 16, borderBottom: '1px solid #d0d7de' }}>
+            <Link to={`/repos/${repo.owner_name}/${repo.name}`} style={{ fontSize: 20, color: '#0969da', textDecoration: 'none', fontWeight: 600 }}>
+              {repo.owner_name}/{repo.name}
+            </Link>
+            <p style={{ color: '#57606a', marginTop: 4 }}>{repo.description || 'No description'}</p>
+            <span style={{ fontSize: 12, color: '#57606a' }}>{repo.is_public ? 'Public' : 'Private'}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+"""
+    
+    # src/pages/RepoDetailPage.tsx
+    files['src/pages/RepoDetailPage.tsx'] = """import { useState, useEffect } from 'react'
+import { useParams } from 'react-router-dom'
+import { apiGet } from '../api'
+
+export default function RepoDetailPage({ user }: { user: any }) {
+  const { owner, name } = useParams()
+  const [repo, setRepo] = useState<any>(null)
+  const [issues, setIssues] = useState<any[]>([])
+  const [pulls, setPulls] = useState<any[]>([])
+
+  useEffect(() => {
+    apiGet(`/repos/${owner}/${name}`).then(setRepo)
+    apiGet(`/repos/${owner}/${name}/issues`).then(setIssues)
+    apiGet(`/repos/${owner}/${name}/pulls`).then(setPulls)
+  }, [owner, name])
+
+  if (!repo) return <div>Loading...</div>
+
+  return (
+    <div>
+      <h2>{owner}/{name}</h2>
+      <p style={{ color: '#57606a', marginBottom: 16 }}>{repo.description}</p>
+      
+      <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+        <span>Branches: {repo.branches?.map((b: any) => b.name).join(', ')}</span>
+        <span>Visibility: {repo.is_public ? 'Public' : 'Private'}</span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div className="card">
+          <h3>Issues ({issues.length})</h3>
+          {issues.map(issue => (
+            <div key={issue.id} style={{ padding: '8px 0', borderBottom: '1px solid #d0d7de' }}>
+              <strong>{issue.title}</strong>
+              <span style={{ marginLeft: 8, color: '#57606a' }}>{issue.state}</span>
+              {issue.labels?.map((l: string) => (
+                <span key={l} style={{ marginLeft: 4, padding: '2px 8px', background: '#ddf4ff', borderRadius: 12, fontSize: 12 }}>{l}</span>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className="card">
+          <h3>Pull Requests ({pulls.length})</h3>
+          {pulls.map(pr => (
+            <div key={pr.id} style={{ padding: '8px 0', borderBottom: '1px solid #d0d7de' }}>
+              <strong>{pr.title}</strong>
+              <span style={{ marginLeft: 8, color: '#57606a' }}>{pr.state}</span>
+              <span style={{ marginLeft: 8, fontSize: 12 }}>{pr.source_branch} → {pr.target_branch}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+"""
+    
+    # src/pages/OrgsPage.tsx
+    files['src/pages/OrgsPage.tsx'] = """import { useState, useEffect } from 'react'
+import { apiGet } from '../api'
+
+export default function OrgsPage() {
+  const [orgs, setOrgs] = useState<any[]>([])
+
+  useEffect(() => {
+    apiGet('/orgs').then(setOrgs)
+  }, [])
+
+  return (
+    <div>
+      <h2>Organizations</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16, marginTop: 16 }}>
+        {orgs.map(org => (
+          <div key={org.id} className="card">
+            <h3>{org.name}</h3>
+            <p style={{ color: '#57606a' }}>{org.description || 'No description'}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+"""
+    
+    return files
 
 def generate_spreadsheet_backend(seed_data):
     """生成 Spreadsheet 后端代码"""
