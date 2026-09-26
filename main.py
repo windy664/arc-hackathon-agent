@@ -771,7 +771,7 @@ app.post('/api/pulls/:id/review', (req, res) => {{
 }});
 
 // 静态文件
-const frontendPath = path.resolve(__dirname, '../../frontend');
+const frontendPath = path.resolve(__dirname, '../../frontend/dist');
 app.use(express.static(frontendPath));
 app.get('*', (req, res) => {{
   res.sendFile(path.join(frontendPath, 'index.html'));
