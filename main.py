@@ -149,17 +149,24 @@ def generate_github_app(backend_dir, frontend_dir, seed_data):
     # 后端
     (backend_dir / 'src').mkdir(exist_ok=True)
     
-    # package.json
+    # package.json - 包含 Playwright 依赖
     with open(backend_dir / 'package.json', 'w') as f:
         json.dump({
             "name": "github-app",
             "version": "1.0.0",
-            "scripts": {"start": "node src/index.js"},
+            "scripts": {
+                "start": "node src/index.js",
+                "test:e2e": "playwright test"
+            },
             "dependencies": {
                 "express": "^4.18.2",
                 "cors": "^2.8.5",
                 "body-parser": "^1.20.2",
                 "better-sqlite3": "^9.4.3"
+            },
+            "devDependencies": {
+                "@playwright/test": "^1.57.0",
+                "playwright": "^1.28.0"
             }
         }, f, indent=2)
     
