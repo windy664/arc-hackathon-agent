@@ -167,6 +167,39 @@ def generate_github_app(backend_dir, frontend_dir, seed_data):
     with open(backend_dir / 'src' / 'index.js', 'w') as f:
         f.write(generate_github_backend(seed_data))
     
+    # 添加 Playwright 配置
+    with open(backend_dir / 'playwright.config.js', 'w') as f:
+        f.write("""const { defineConfig } = require('@playwright/test');
+
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || process.env.ARC_WEB_BASE_URL || 'http://127.0.0.1:3000';
+
+module.exports = defineConfig({
+  testDir: './test-e2e',
+  testMatch: /.*\\.(js|jsx|ts|tsx)$/,
+  timeout: 30000,
+  use: {
+    baseURL,
+    trace: 'retain-on-failure',
+  },
+});
+""")
+    
+    # 添加测试目录
+    test_dir = backend_dir / 'test-e2e'
+    test_dir.mkdir(exist_ok=True)
+    
+    # 添加基础测试
+    with open(test_dir / 'health.test.js', 'w') as f:
+        f.write("""const { test, expect } = require('@playwright/test');
+
+test('health check', async ({ request }) => {
+  const response = await request.get('/api/health');
+  expect(response.ok()).toBeTruthy();
+  const data = await response.json();
+  expect(data.status).toBe('ok');
+});
+""")
+    
     # 前端 - React + TypeScript
     frontend_files = generate_github_frontend(seed_data)
     for file_path, content in frontend_files.items():
