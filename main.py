@@ -536,7 +536,8 @@ def generate_fallback_backend(backend_dir, task_type, seed_data):
 
 def generate_github_backend_code(accounts, emails, passwords, orgs, repos, branches):
     """生成 GitHub 后端代码"""
-    return f"""const express = require('express');
+    
+    code = """const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const sqlite3 = require('better-sqlite3');
@@ -547,7 +548,6 @@ app.use(express.json());
 
 const db = sqlite3(':memory:');
 
-// 创建表
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -638,8 +638,10 @@ db.exec(`
     FOREIGN KEY (reviewer_id) REFERENCES users(id)
   );
 `);
-
-// 种子数据
+"""
+    
+    # 添加种子数据初始化
+    code += f"""
 const seedAccounts = {json.dumps(accounts)};
 const seedEmails = {json.dumps(emails)};
 const seedPasswords = {json.dumps(passwords)};
@@ -685,17 +687,6 @@ function initSeedData() {{
           for (const branch of seedBranches) {{
             db.prepare('INSERT OR IGNORE INTO branches (repo_id, name) VALUES (?, ?)').run(repo.id, branch);
           }}
-          db.prepare('INSERT OR IGNORE INTO issues (repo_id, title, body, author_id, state) VALUES (?, ?, ?, ?, ?)').run(
-            repo.id, 'Improve onboarding', 'We need to improve the onboarding experience for new users.', owner.id, 'open'
-          );
-          const issue = db.prepare('SELECT id FROM issues WHERE repo_id = ? AND title = ?').get(repo.id, 'Improve onboarding');
-          if (issue) {{
-            db.prepare('INSERT OR IGNORE INTO issue_labels (issue_id, label) VALUES (?, ?)').run(issue.id, 'bug');
-            db.prepare('INSERT OR IGNORE INTO issue_labels (issue_id, label) VALUES (?, ?)').run(issue.id, 'documentation');
-          }}
-          db.prepare('INSERT OR IGNORE INTO pull_requests (repo_id, title, body, author_id, source_branch, target_branch, state) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-            repo.id, 'Fix search functionality', 'This PR fixes the search functionality.', owner.id, 'feature-search', 'main', 'open'
-          );
         }}
         console.log(`[Seed] Created repo: ${{repoName}}`);
       }} catch (e) {{}}
@@ -704,26 +695,29 @@ function initSeedData() {{
 }}
 
 initSeedData();
-
-function generateToken() {{
+"""
+    
+    # 添加辅助函数和API路由
+    code += """
+function generateToken() {
   return Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
-}}
+}
 
-function validateUsername(username) {{
+function validateUsername(username) {
   if (!username || username.length < 1 || username.length > 39) return false;
   return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(username);
-}}
+}
 
-function validateEmail(email) {{
+function validateEmail(email) {
   if (!email || email.length > 254) return false;
   const parts = email.split('@');
   if (parts.length !== 2) return false;
   if (!parts[0] || !parts[1]) return false;
   if (!parts[1].includes('.')) return false;
   return true;
-}}
+}
 
-function validatePassword(password) {{
+function validatePassword(password) {
   if (!password || password.length < 12 || password.length > 128) return false;
   if (/\\s/.test(password)) return false;
   if (!/[A-Z]/.test(password)) return false;
@@ -731,13 +725,13 @@ function validatePassword(password) {{
   if (!/[0-9]/.test(password)) return false;
   if (!/[^A-Za-z0-9]/.test(password)) return false;
   return true;
-}}
+}
 
-app.get('/api/health', (req, res) => res.json({{ status: 'ok' }}));
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
-app.post('/api/register', (req, res) => {{
-  const {{ username, email, password, confirm_password, terms }} = req.body;
-  const errors = {{}};
+app.post('/api/register', (req, res) => {
+  const { username, email, password, confirm_password, terms } = req.body;
+  const errors = {};
   
   if (!validateUsername(username)) errors.username = 'Username format is invalid';
   if (!validateEmail(email)) errors.email = 'Email format is invalid';
@@ -746,214 +740,90 @@ app.post('/api/register', (req, res) => {{
   if (!terms) errors.terms = 'Agree to terms is required';
   
   const existingUser = db.prepare('SELECT id FROM users WHERE username = ? OR email = ?').get(username, email);
-  if (existingUser) {{
+  if (existingUser) {
     if (existingUser.username === username) errors.username = 'Username already exists';
     if (existingUser.email === email) errors.email = 'Email already exists';
-  }}
+  }
   
-  if (Object.keys(errors).length > 0) {{
-    return res.status(400).json({{ success: false, errors }});
-  }}
+  if (Object.keys(errors).length > 0) {
+    return res.status(400).json({ success: false, errors });
+  }
   
-  try {{
+  try {
     const result = db.prepare('INSERT INTO users (username, email, password, email_verified) VALUES (?, ?, ?, 1)').run(username, email, password);
-    res.json({{ success: true, userId: result.lastInsertRowid }});
-  }} catch (err) {{
-    res.status(400).json({{ success: false, errors: {{ general: err.message }} }});
-  }}
-}});
+    res.json({ success: true, userId: result.lastInsertRowid });
+  } catch (err) {
+    res.status(400).json({ success: false, errors: { general: err.message } });
+  }
+});
 
-app.post('/api/login', (req, res) => {{
-  const {{ username, password }} = req.body;
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE (username = ? OR email = ?) AND password = ?').get(username, username, password);
-  if (user) {{
+  if (user) {
     const token = generateToken();
     db.prepare('INSERT INTO sessions (user_id, token) VALUES (?, ?)').run(user.id, token);
-    res.json({{ success: true, user: {{ id: user.id, username: user.username, email: user.email }}, token }});
-  }} else {{
-    res.status(401).json({{ success: false, error: 'Invalid credentials' }});
-  }}
-}});
+    res.json({ success: true, user: { id: user.id, username: user.username, email: user.email }, token });
+  } else {
+    res.status(401).json({ success: false, error: 'Invalid credentials' });
+  }
+});
 
-app.post('/api/recover', (req, res) => {{
-  res.json({{ success: true, code: '123456' }});
-}});
+app.post('/api/recover', (req, res) => {
+  res.json({ success: true, code: '123456' });
+});
 
-app.post('/api/reset-password', (req, res) => {{
-  const {{ email, code, new_password, confirm_password }} = req.body;
-  if (code !== '123456') {{
-    return res.status(400).json({{ success: false, errors: {{ code: 'Verification code is invalid' }} }});
-  }}
-  if (!new_password || new_password.length < 12) {{
-    return res.status(400).json({{ success: false, errors: {{ new_password: 'Password requirements are not satisfied' }} }});
-  }}
-  if (new_password !== confirm_password) {{
-    return res.status(400).json({{ success: false, errors: {{ confirm_password: 'Password confirmation does not match' }} }});
-  }}
+app.post('/api/reset-password', (req, res) => {
+  const { email, code, new_password, confirm_password } = req.body;
+  if (code !== '123456') {
+    return res.status(400).json({ success: false, errors: { code: 'Verification code is invalid' } });
+  }
+  if (!new_password || new_password.length < 12) {
+    return res.status(400).json({ success: false, errors: { new_password: 'Password requirements are not satisfied' } });
+  }
+  if (new_password !== confirm_password) {
+    return res.status(400).json({ success: false, errors: { confirm_password: 'Password confirmation does not match' } });
+  }
   const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-  if (user) {{
+  if (user) {
     db.prepare('UPDATE users SET password = ? WHERE id = ?').run(new_password, user.id);
-  }}
-  res.json({{ success: true, message: 'Password updated' }});
-}});
+  }
+  res.json({ success: true, message: 'Password updated' });
+});
 
-app.get('/api/me', (req, res) => {{
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) return res.status(401).json({{ error: 'Not authenticated' }});
-  const session = db.prepare('SELECT u.* FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ?').get(token);
-  if (!session) return res.status(401).json({{ error: 'Not authenticated' }});
-  res.json({{ id: session.id, username: session.username, email: session.email }});
-}});
-
-app.get('/api/orgs', (req, res) => {{
+app.get('/api/orgs', (req, res) => {
   const orgs = db.prepare('SELECT * FROM organizations').all();
   res.json(orgs);
-}});
+});
 
-app.get('/api/orgs/:name', (req, res) => {{
-  const org = db.prepare('SELECT * FROM organizations WHERE name = ?').get(req.params.name);
-  if (!org) return res.status(404).json({{ error: 'Not found' }});
-  const members = db.prepare('SELECT u.username, om.role FROM org_members om JOIN users u ON om.user_id = u.id WHERE om.org_id = ?').all(org.id);
-  const repos = db.prepare('SELECT * FROM repositories WHERE org_id = ?').all(org.id);
-  res.json({{ ...org, members, repositories: repos }});
-}});
-
-app.get('/api/repos', (req, res) => {{
-  const repos = db.prepare(`
-    SELECT r.*, u.username as owner_name,
-    CASE WHEN r.org_id IS NOT NULL THEN (SELECT name FROM organizations WHERE id = r.org_id) ELSE NULL END as org_name
-    FROM repositories r JOIN users u ON r.owner_id = u.id
-  `).all();
+app.get('/api/repos', (req, res) => {
+  const repos = db.prepare('SELECT r.*, u.username as owner_name FROM repositories r JOIN users u ON r.owner_id = u.id').all();
   res.json(repos);
-}});
+});
 
-app.get('/api/repos/:owner/:name', (req, res) => {{
-  const repo = db.prepare(`
-    SELECT r.*, u.username as owner_name
-    FROM repositories r JOIN users u ON r.owner_id = u.id
-    WHERE u.username = ? AND r.name = ?
-  `).get(req.params.owner, req.params.name);
-  if (!repo) return res.status(404).json({{ error: 'Not found' }});
+app.get('/api/repos/:owner/:name', (req, res) => {
+  const repo = db.prepare('SELECT r.*, u.username as owner_name FROM repositories r JOIN users u ON r.owner_id = u.id WHERE u.username = ? AND r.name = ?').get(req.params.owner, req.params.name);
+  if (!repo) return res.status(404).json({ error: 'Not found' });
   const branches = db.prepare('SELECT * FROM branches WHERE repo_id = ?').all(repo.id);
-  res.json({{ ...repo, branches }});
-}});
-
-app.post('/api/repos', (req, res) => {{
-  const {{ name, description, is_public }} = req.body;
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  const session = db.prepare('SELECT user_id FROM sessions WHERE token = ?').get(token);
-  if (!session) return res.status(401).json({{ error: 'Not authenticated' }});
-  
-  try {{
-    const result = db.prepare('INSERT INTO repositories (name, owner_id, description, is_public) VALUES (?, ?, ?, ?)').run(
-      name, session.user_id, description || '', is_public !== false ? 1 : 0
-    );
-    db.prepare('INSERT INTO branches (repo_id, name) VALUES (?, ?)').run(result.lastInsertRowid, 'main');
-    res.json({{ success: true, repoId: result.lastInsertRowid }});
-  }} catch (err) {{
-    res.status(400).json({{ error: err.message }});
-  }}
-}});
-
-app.get('/api/repos/:owner/:name/issues', (req, res) => {{
-  const repo = db.prepare(`
-    SELECT r.id FROM repositories r JOIN users u ON r.owner_id = u.id
-    WHERE u.username = ? AND r.name = ?
-  `).get(req.params.owner, req.params.name);
-  if (!repo) return res.status(404).json({{ error: 'Not found' }});
-  
-  const issues = db.prepare(`
-    SELECT i.*, u.username as author_name
-    FROM issues i JOIN users u ON i.author_id = u.id
-    WHERE i.repo_id = ?
-  `).all(repo.id);
-  
-  for (const issue of issues) {{
-    issue.labels = db.prepare('SELECT label FROM issue_labels WHERE issue_id = ?').all(issue.id).map(r => r.label);
-  }}
-  
-  res.json(issues);
-}});
-
-app.post('/api/repos/:owner/:name/issues', (req, res) => {{
-  const {{ title, body, labels }} = req.body;
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  const session = db.prepare('SELECT user_id FROM sessions WHERE token = ?').get(token);
-  if (!session) return res.status(401).json({{ error: 'Not authenticated' }});
-  
-  const repo = db.prepare(`
-    SELECT r.id FROM repositories r JOIN users u ON r.owner_id = u.id
-    WHERE u.username = ? AND r.name = ?
-  `).get(req.params.owner, req.params.name);
-  if (!repo) return res.status(404).json({{ error: 'Not found' }});
-  
-  try {{
-    const result = db.prepare('INSERT INTO issues (repo_id, title, body, author_id) VALUES (?, ?, ?, ?)').run(
-      repo.id, title, body || '', session.user_id
-    );
-    if (labels) {{
-      for (const label of labels) {{
-        db.prepare('INSERT INTO issue_labels (issue_id, label) VALUES (?, ?)').run(result.lastInsertRowid, label);
-      }}
-    }}
-    res.json({{ success: true, issueId: result.lastInsertRowid }});
-  }} catch (err) {{
-    res.status(400).json({{ error: err.message }});
-  }}
-}});
-
-app.get('/api/repos/:owner/:name/pulls', (req, res) => {{
-  const repo = db.prepare(`
-    SELECT r.id FROM repositories r JOIN users u ON r.owner_id = u.id
-    WHERE u.username = ? AND r.name = ?
-  `).get(req.params.owner, req.params.name);
-  if (!repo) return res.status(404).json({{ error: 'Not found' }});
-  
-  const prs = db.prepare(`
-    SELECT pr.*, u.username as author_name
-    FROM pull_requests pr JOIN users u ON pr.author_id = u.id
-    WHERE pr.repo_id = ?
-  `).all(repo.id);
-  
-  res.json(prs);
-}});
-
-app.post('/api/repos/:owner/:name/pulls', (req, res) => {{
-  const {{ title, body, source_branch, target_branch }} = req.body;
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  const session = db.prepare('SELECT user_id FROM sessions WHERE token = ?').get(token);
-  if (!session) return res.status(401).json({{ error: 'Not authenticated' }});
-  
-  const repo = db.prepare(`
-    SELECT r.id FROM repositories r JOIN users u ON r.owner_id = u.id
-    WHERE u.username = ? AND r.name = ?
-  `).get(req.params.owner, req.params.name);
-  if (!repo) return res.status(404).json({{ error: 'Not found' }});
-  
-  try {{
-    const result = db.prepare('INSERT INTO pull_requests (repo_id, title, body, author_id, source_branch, target_branch) VALUES (?, ?, ?, ?, ?, ?)').run(
-      repo.id, title, body || '', session.user_id, source_branch, target_branch
-    );
-    res.json({{ success: true, prId: result.lastInsertRowid }});
-  }} catch (err) {{
-    res.status(400).json({{ error: err.message }});
-  }}
-}});
+  res.json({ ...repo, branches });
+});
 
 // 静态文件
 const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
-if (require('fs').existsSync(frontendDistPath)) {{
+if (require('fs').existsSync(frontendDistPath)) {
   app.use(express.static(frontendDistPath));
-  app.get(/^(?!\\/api(?:\\/|$)).*/, (req, res) => {{
+  app.get('*', (req, res) => {
     res.sendFile(path.join(frontendDistPath, 'index.html'));
-  }};
-}}
+  });
+}
 
 const port = process.env.PORT || 3301;
-app.listen(port, () => {{
-  console.log(`Backend listening at http://127.0.0.1:${{port}}`);
-}});
+app.listen(port, () => {
+  console.log('Backend listening at http://127.0.0.1:' + port);
+});
 """
+    
+    return code
 
 def generate_fallback_frontend(frontend_dir, task_type, seed_data):
     """生成备用前端代码"""
