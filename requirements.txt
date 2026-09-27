@@ -1,2 +1,13 @@
-# Minimal dependencies - platform already has openai, requests, etc.
-# Only add what's truly needed
+aiofiles
+openai
+requests
+python-dotenv
+pyyaml
+pydantic
+colorama
+click
+jsonschema
+tiktoken
+httpx
+deepagents
+langchain-openai
