@@ -577,9 +577,9 @@ if (require('fs').existsSync(frontendDistPath)) {{
 }}
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
+app.listen(port, () => {{
   console.log('Backend listening at http://127.0.0.1:' + port);
-});
+}});
 """
     
     with open(src_dir / 'index.js', 'w') as f:
