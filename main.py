@@ -93,7 +93,10 @@ def main():
     
     # 构建前端
     print(f"[Agent] Building frontend...")
-    build_frontend(frontend_dir)
+    try:
+        build_frontend(frontend_dir)
+    except Exception as e:
+        print(f"[Agent] Warning: Frontend build failed: {e}")
     
     print(f"[Agent] Done!")
 
@@ -1054,23 +1057,19 @@ def build_frontend(frontend_dir):
         print("[Agent] Frontend dependencies installed")
     except subprocess.CalledProcessError as e:
         print(f"[Agent] Warning: npm install failed: {e}")
-        try:
-            subprocess.run(['pnpm', 'install'], cwd=str(frontend_dir), capture_output=True, check=True)
-            print("[Agent] Frontend dependencies installed with pnpm")
-        except subprocess.CalledProcessError as e2:
-            print(f"[Agent] Warning: pnpm install also failed: {e2}")
-            return
+        # 不要崩溃，继续
+        return
+    except FileNotFoundError:
+        print("[Agent] Warning: npm not found")
+        return
     
     try:
         subprocess.run(['npm', 'run', 'build'], cwd=str(frontend_dir), capture_output=True, check=True)
         print("[Agent] Frontend built successfully")
     except subprocess.CalledProcessError as e:
         print(f"[Agent] Warning: npm build failed: {e}")
-        try:
-            subprocess.run(['pnpm', 'run', 'build'], cwd=str(frontend_dir), capture_output=True, check=True)
-            print("[Agent] Frontend built with pnpm")
-        except subprocess.CalledProcessError as e2:
-            print(f"[Agent] Warning: pnpm build also failed: {e2}")
+    except FileNotFoundError:
+        print("[Agent] Warning: npm not found")
 
 if __name__ == '__main__':
     main()
