@@ -323,8 +323,12 @@ def write_frontend_code(frontend_dir, code):
                 f.write(block)
             print(f"[Agent] Written src/index.css")
     
-    # 如果没有找到，写入默认代码
-    if not (src_dir / 'main.tsx').exists():
+    # 检查所有必需文件是否存在
+    required_files = ['main.tsx', 'App.tsx', 'index.css']
+    missing_files = [f for f in required_files if not (src_dir / f).exists()]
+    
+    if missing_files:
+        print(f"[Agent] Missing files: {missing_files}, using fallback")
         write_fallback_frontend(frontend_dir, 'github', {})
 
 def write_fallback_backend(backend_dir, task_type, seed_data):
