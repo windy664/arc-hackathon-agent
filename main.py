@@ -754,16 +754,35 @@ def build_frontend(frontend_dir):
     """构建前端"""
     print("[Agent] Building frontend...")
     
+    # 检查 package.json 是否存在
+    if not (frontend_dir / 'package.json').exists():
+        print("[Agent] No package.json found, skipping build")
+        return
+    
     try:
-        subprocess.run(['npm', 'install'], cwd=str(frontend_dir), capture_output=True, check=True)
+        result = subprocess.run(['npm', 'install'], cwd=str(frontend_dir), capture_output=True, text=True, timeout=60)
+        if result.returncode != 0:
+            print(f"[Agent] Warning: npm install failed: {result.stderr[:200]}")
+            return
         print("[Agent] Frontend dependencies installed")
     except Exception as e:
         print(f"[Agent] Warning: npm install failed: {e}")
         return
     
     try:
-        subprocess.run(['npm', 'run', 'build'], cwd=str(frontend_dir), capture_output=True, check=True)
-        print("[Agent] Frontend built successfully")
+        result = subprocess.run(['npm', 'run', 'build'], cwd=str(frontend_dir), capture_output=True, text=True, timeout=60)
+        if result.returncode != 0:
+            print(f"[Agent] Warning: npm build failed: {result.stderr[:200]}")
+            # 尝试直接复制 index.html 到 dist
+            dist_dir = frontend_dir / 'dist'
+            dist_dir.mkdir(exist_ok=True)
+            index_html = frontend_dir / 'index.html'
+            if index_html.exists():
+                import shutil
+                shutil.copy(index_html, dist_dir / 'index.html')
+                print("[Agent] Copied index.html to dist/")
+        else:
+            print("[Agent] Frontend built successfully")
     except Exception as e:
         print(f"[Agent] Warning: npm build failed: {e}")
 
