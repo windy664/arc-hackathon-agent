@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-ARC-Bench Hackathon Agent - 简化版
-只生成代码，让平台处理启动
+ARC-Bench Hackathon Agent - 使用 SDK 标记任务状态
 """
 import os
 import sys
@@ -29,6 +28,16 @@ def main():
     
     print(f"[Agent] Requirements: {requirements_source}")
     print(f"[Agent] Output: {output_dir}")
+    
+    # 初始化 SDK
+    try:
+        from arcbench_agent_runtime import AgentRuntime
+        runtime = AgentRuntime.from_env()
+        runtime.events.mark_run_started("Agent started")
+        print("[Agent] SDK initialized")
+    except Exception as e:
+        print(f"[Agent] Warning: SDK init failed: {e}")
+        runtime = None
     
     output_path = Path(output_dir)
     
@@ -404,7 +413,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Ar
 """)
     
     print(f"[Agent] Frontend created")
+    
+    # 标记任务完成
+    if runtime:
+        try:
+            runtime.events.mark_implementation_done("ROOT", "Application generated")
+            runtime.events.mark_run_completed("Agent completed")
+            print("[Agent] SDK marked tasks as done")
+        except Exception as e:
+            print(f"[Agent] Warning: SDK mark failed: {e}")
+    
     print(f"[Agent] Done!")
+
+if __name__ == '__main__':
+    main()
 
 if __name__ == '__main__':
     main()
