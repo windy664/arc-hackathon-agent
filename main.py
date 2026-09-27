@@ -162,35 +162,66 @@ def write_generated_code(directory, code, code_type):
     code_blocks = re.findall(r'```(?:\w+)?\n(.*?)```', code, re.DOTALL)
     
     if not code_blocks:
-        print(f"[Agent] No code blocks found, writing as single file")
-        if code_type == 'backend':
-            with open(directory / 'src' / 'index.js', 'w') as f:
-                f.write(code)
-        else:
-            with open(directory / 'index.html', 'w') as f:
-                f.write(code)
+        print(f"[Agent] No code blocks found in LLM output")
         return
     
     # 写入代码块
     for i, block in enumerate(code_blocks):
-        # 尝试从注释中提取文件名
-        first_line = block.strip().split('\n')[0]
-        if '//' in first_line or '#' in first_line or '<!--' in first_line:
-            # 可能是文件名注释
-            pass
+        block = block.strip()
+        if not block:
+            continue
         
-        if code_type == 'backend':
-            if i == 0:
-                (directory / 'src').mkdir(exist_ok=True)
-                with open(directory / 'src' / 'index.js', 'w') as f:
+        # 检测文件名
+        first_line = block.split('\n')[0].strip()
+        
+        if 'package.json' in first_line or '"name"' in block[:100]:
+            # 这是 package.json
+            # 确保是有效的 JSON
+            try:
+                # 尝试解析 JSON
+                json_start = block.find('{')
+                json_end = block.rfind('}') + 1
+                if json_start >= 0 and json_end > json_start:
+                    json_str = block[json_start:json_end]
+                    json.loads(json_str)  # 验证 JSON
+                    with open(directory / 'package.json', 'w') as f:
+                        f.write(json_str)
+                    print(f"[Agent] Written package.json")
+            except json.JSONDecodeError as e:
+                print(f"[Agent] Warning: Invalid JSON in package.json: {e}")
+                
+        elif 'index.js' in first_line or 'const ' in block[:50]:
+            # 这是 JavaScript 代码
+            src_dir = directory / 'src'
+            src_dir.mkdir(exist_ok=True)
+            with open(src_dir / 'index.js', 'w') as f:
+                f.write(block)
+            print(f"[Agent] Written src/index.js")
+            
+        elif 'index.html' in first_line or '<!DOCTYPE' in block[:50]:
+            # 这是 HTML
+            with open(directory / 'index.html', 'w') as f:
+                f.write(block)
+            print(f"[Agent] Written index.html")
+            
+        elif 'import ' in block[:100] or 'export ' in block[:100]:
+            # 这是 TypeScript/React 代码
+            src_dir = directory / 'src'
+            src_dir.mkdir(exist_ok=True)
+            
+            if 'App.tsx' in first_line or 'function App' in block:
+                with open(src_dir / 'App.tsx', 'w') as f:
                     f.write(block)
-            elif i == 1:
-                with open(directory / 'package.json', 'w') as f:
+                print(f"[Agent] Written src/App.tsx")
+            elif 'main.tsx' in first_line or 'ReactDOM' in block:
+                with open(src_dir / 'main.tsx', 'w') as f:
                     f.write(block)
-        else:
-            if i == 0:
-                with open(directory / 'index.html', 'w') as f:
+                print(f"[Agent] Written src/main.tsx")
+            else:
+                # 默认写入 App.tsx
+                with open(src_dir / 'App.tsx', 'w') as f:
                     f.write(block)
+                print(f"[Agent] Written src/App.tsx")
 
 def extract_seed_data(requirements):
     """提取种子数据"""
