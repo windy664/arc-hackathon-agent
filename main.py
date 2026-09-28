@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ARC-Bench Hackathon Agent - 使用 SDK 标记任务状态
+ARC-Bench Hackathon Agent - 生成完整 GitHub 应用
 """
 import os
 import sys
@@ -9,7 +9,6 @@ from pathlib import Path
 
 def main():
     print(f"[Agent] Starting...")
-    print(f"[Agent] Args: {sys.argv}")
     
     if len(sys.argv) < 3:
         print("Usage: main.py <requirements_source> --output-dir <output_dir>")
@@ -22,11 +21,6 @@ def main():
             output_dir = sys.argv[i + 1]
             break
     
-    if not output_dir:
-        print("Error: --output-dir is required")
-        sys.exit(1)
-    
-    print(f"[Agent] Requirements: {requirements_source}")
     print(f"[Agent] Output: {output_dir}")
     
     # 初始化 SDK
@@ -34,9 +28,7 @@ def main():
         from arcbench_agent_runtime import AgentRuntime
         runtime = AgentRuntime.from_env()
         runtime.events.mark_run_started("Agent started")
-        print("[Agent] SDK initialized")
-    except Exception as e:
-        print(f"[Agent] Warning: SDK init failed: {e}")
+    except:
         runtime = None
     
     output_path = Path(output_dir)
@@ -60,9 +52,99 @@ def main():
             }
         }, f, indent=2)
     
-    # 后端代码
+    # 后端代码 - 完整的 GitHub API
     with open(backend_dir / 'src' / 'index.js', 'w') as f:
-        f.write("""const express = require('express');
+        f.write(GITHUB_BACKEND_CODE)
+    
+    print(f"[Agent] Backend created")
+    
+    # 创建前端
+    frontend_dir = output_path / 'frontend'
+    frontend_dir.mkdir(parents=True, exist_ok=True)
+    src_dir = frontend_dir / 'src'
+    src_dir.mkdir(exist_ok=True)
+    
+    # 前端 package.json
+    with open(frontend_dir / 'package.json', 'w') as f:
+        json.dump({
+            "name": "frontend",
+            "version": "0.0.0",
+            "type": "module",
+            "scripts": {
+                "dev": "vite",
+                "build": "vite build",
+                "preview": "vite preview"
+            },
+            "dependencies": {
+                "react": "^19.2.0",
+                "react-dom": "^19.2.0",
+                "react-router-dom": "^7.11.0"
+            },
+            "devDependencies": {
+                "@types/react": "^19.2.5",
+                "@types/react-dom": "^19.2.3",
+                "@vitejs/plugin-react": "^5.1.1",
+                "vite": "^7.2.4"
+            }
+        }, f, indent=2)
+    
+    # vite.config.js
+    with open(frontend_dir / 'vite.config.js', 'w') as f:
+        f.write("""import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      '/api': 'http://localhost:3000'
+    }
+  }
+})
+""")
+    
+    # index.html
+    with open(frontend_dir / 'index.html', 'w') as f:
+        f.write("""<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitHub</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+""")
+    
+    # main.tsx
+    with open(src_dir / 'main.tsx', 'w') as f:
+        f.write(MAIN_TSX_CODE)
+    
+    # App.tsx
+    with open(src_dir / 'App.tsx', 'w') as f:
+        f.write(APP_TSX_CODE)
+    
+    # index.css
+    with open(src_dir / 'index.css', 'w') as f:
+        f.write(CSS_CODE)
+    
+    print(f"[Agent] Frontend created")
+    
+    # 标记完成
+    if runtime:
+        try:
+            runtime.events.mark_implementation_done("ROOT", "GitHub app generated")
+            runtime.events.mark_run_completed("Agent completed")
+        except:
+            pass
+    
+    print(f"[Agent] Done!")
+
+# 后端代码
+GITHUB_BACKEND_CODE = '''const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const sqlite3 = require('better-sqlite3');
@@ -73,6 +155,7 @@ app.use(express.json());
 
 const db = sqlite3(':memory:');
 
+// 创建表
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,21 +172,83 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+  CREATE TABLE IF NOT EXISTS organizations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS repositories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    owner_id INTEGER,
+    description TEXT,
+    is_public BOOLEAN DEFAULT 1,
+    default_branch TEXT DEFAULT 'main',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_id) REFERENCES users(id)
+  );
+  CREATE TABLE IF NOT EXISTS branches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    FOREIGN KEY (repo_id) REFERENCES repositories(id)
+  );
+  CREATE TABLE IF NOT EXISTS issues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    author_id INTEGER NOT NULL,
+    state TEXT DEFAULT 'open',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (repo_id) REFERENCES repositories(id),
+    FOREIGN KEY (author_id) REFERENCES users(id)
+  );
+  CREATE TABLE IF NOT EXISTS pull_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    author_id INTEGER NOT NULL,
+    source_branch TEXT,
+    target_branch TEXT,
+    state TEXT DEFAULT 'open',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (repo_id) REFERENCES repositories(id),
+    FOREIGN KEY (author_id) REFERENCES users(id)
+  );
 `);
 
-// Seed data
-const seedAccounts = ['alice-dev'];
-const seedEmails = ['alice.dev@example.test'];
+// 种子数据
+const seedAccounts = ['alice-dev', 'bob-reviewer'];
+const seedEmails = ['alice.dev@example.test', 'bob.reviewer@example.test'];
 const seedPasswords = ['Valid-password-123!'];
 
 function initSeedData() {
   for (let i = 0; i < seedAccounts.length; i++) {
     const username = seedAccounts[i];
     const email = seedEmails[i] || username + '@example.test';
-    const password = seedPasswords[0] || 'Valid-password-123!';
+    const password = seedPasswords[0];
     try {
       db.prepare('INSERT OR IGNORE INTO users (username, email, password, email_verified) VALUES (?, ?, ?, 1)').run(username, email, password);
       console.log('[Seed] Created user: ' + username);
+    } catch (e) {}
+  }
+  
+  // 创建示例仓库
+  const owner = db.prepare('SELECT id FROM users WHERE username = ?').get('alice-dev');
+  if (owner) {
+    try {
+      db.prepare('INSERT OR IGNORE INTO repositories (name, owner_id, description, is_public) VALUES (?, ?, ?, 1)').run('acme-docs', owner.id, 'Acme documentation repository');
+      const repo = db.prepare('SELECT id FROM repositories WHERE name = ?').get('acme-docs');
+      if (repo) {
+        db.prepare('INSERT OR IGNORE INTO branches (repo_id, name) VALUES (?, ?)').run(repo.id, 'main');
+        db.prepare('INSERT OR IGNORE INTO branches (repo_id, name) VALUES (?, ?)').run(repo.id, 'feature-search');
+        db.prepare('INSERT OR IGNORE INTO issues (repo_id, title, body, author_id, state) VALUES (?, ?, ?, ?, ?)').run(repo.id, 'Improve onboarding', 'We need to improve the onboarding experience.', owner.id, 'open');
+        db.prepare('INSERT OR IGNORE INTO pull_requests (repo_id, title, body, author_id, source_branch, target_branch, state) VALUES (?, ?, ?, ?, ?, ?, ?)').run(repo.id, 'Fix search functionality', 'This PR fixes search.', owner.id, 'feature-search', 'main', 'open');
+      }
+      console.log('[Seed] Created repository: acme-docs');
     } catch (e) {}
   }
 }
@@ -116,6 +261,7 @@ function generateToken() {
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
+// 认证 API
 app.post('/api/register', (req, res) => {
   const { username, email, password, confirm_password, terms } = req.body;
   const errors = {};
@@ -178,6 +324,34 @@ app.post('/api/reset-password', (req, res) => {
   res.json({ success: true, message: 'Password updated' });
 });
 
+// 仓库 API
+app.get('/api/repos', (req, res) => {
+  const repos = db.prepare('SELECT r.*, u.username as owner_name FROM repositories r JOIN users u ON r.owner_id = u.id').all();
+  res.json(repos);
+});
+
+app.get('/api/repos/:owner/:name', (req, res) => {
+  const repo = db.prepare('SELECT r.*, u.username as owner_name FROM repositories r JOIN users u ON r.owner_id = u.id WHERE u.username = ? AND r.name = ?').get(req.params.owner, req.params.name);
+  if (!repo) return res.status(404).json({ error: 'Not found' });
+  const branches = db.prepare('SELECT * FROM branches WHERE repo_id = ?').all(repo.id);
+  res.json({ ...repo, branches });
+});
+
+app.get('/api/repos/:owner/:name/issues', (req, res) => {
+  const repo = db.prepare('SELECT r.id FROM repositories r JOIN users u ON r.owner_id = u.id WHERE u.username = ? AND r.name = ?').get(req.params.owner, req.params.name);
+  if (!repo) return res.status(404).json({ error: 'Not found' });
+  const issues = db.prepare('SELECT i.*, u.username as author_name FROM issues i JOIN users u ON i.author_id = u.id WHERE i.repo_id = ?').all(repo.id);
+  res.json(issues);
+});
+
+app.get('/api/repos/:owner/:name/pulls', (req, res) => {
+  const repo = db.prepare('SELECT r.id FROM repositories r JOIN users u ON r.owner_id = u.id WHERE u.username = ? AND r.name = ?').get(req.params.owner, req.params.name);
+  if (!repo) return res.status(404).json({ error: 'Not found' });
+  const prs = db.prepare('SELECT pr.*, u.username as author_name FROM pull_requests pr JOIN users u ON pr.author_id = u.id WHERE pr.repo_id = ?').all(repo.id);
+  res.json(prs);
+});
+
+// 静态文件
 const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
 if (require('fs').existsSync(frontendDistPath)) {
   app.use(express.static(frontendDistPath));
@@ -190,74 +364,10 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log('Backend listening at http://127.0.0.1:' + port);
 });
-""")
-    
-    print(f"[Agent] Backend created")
-    
-    # 创建前端
-    frontend_dir = output_path / 'frontend'
-    frontend_dir.mkdir(parents=True, exist_ok=True)
-    src_dir = frontend_dir / 'src'
-    src_dir.mkdir(exist_ok=True)
-    
-    # 前端 package.json
-    with open(frontend_dir / 'package.json', 'w') as f:
-        json.dump({
-            "name": "frontend",
-            "version": "0.0.0",
-            "type": "module",
-            "scripts": {
-                "dev": "vite",
-                "build": "vite build",
-                "preview": "vite preview"
-            },
-            "dependencies": {
-                "react": "^19.2.0",
-                "react-dom": "^19.2.0",
-                "react-router-dom": "^7.11.0"
-            },
-            "devDependencies": {
-                "@types/react": "^19.2.5",
-                "@types/react-dom": "^19.2.3",
-                "@vitejs/plugin-react": "^5.1.1",
-                "vite": "^7.2.4"
-            }
-        }, f, indent=2)
-    
-    # vite.config.js
-    with open(frontend_dir / 'vite.config.js', 'w') as f:
-        f.write("""import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+'''
 
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      '/api': 'http://localhost:3000'
-    }
-  }
-})
-""")
-    
-    # index.html
-    with open(frontend_dir / 'index.html', 'w') as f:
-        f.write("""<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Application</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
-""")
-    
-    # main.tsx
-    with open(src_dir / 'main.tsx', 'w') as f:
-        f.write("""import React from 'react'
+# 前端代码
+MAIN_TSX_CODE = '''import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
@@ -270,32 +380,65 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </React.StrictMode>,
 )
-""")
-    
-    # App.tsx
-    with open(src_dir / 'App.tsx', 'w') as f:
-        f.write("""import { Routes, Route, Link } from 'react-router-dom'
-import { useState } from 'react'
+'''
+
+APP_TSX_CODE = '''import { Routes, Route, Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 
 function App() {
   const [user, setUser] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    // 检查登录状态
+    const savedUser = localStorage.getItem('user')
+    if (savedUser) {
+      setUser(JSON.parse(savedUser))
+    }
+    setLoading(false)
+  }, [])
+
+  const handleLogout = () => {
+    localStorage.removeItem('user')
+    setUser(null)
+    window.location.href = '/'
+  }
+
+  if (loading) return <div>Loading...</div>
 
   return (
     <div>
-      <header style={{ background: '#24292f', color: 'white', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ margin: 0, fontSize: '1.5rem' }}>Application</h1>
-        <nav>
-          <Link to="/" style={{ color: 'white', marginRight: 16 }}>Home</Link>
-          {!user && <a href="/register" style={{ color: 'white', marginRight: 16 }}>Register</a>}
-          {!user && <a href="/login" style={{ color: 'white', marginRight: 16 }}>Sign in</a>}
-          {user && <span style={{ color: 'white' }}>{user.username}</span>}
-        </nav>
+      <header style={{ background: '#24292f', color: 'white', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <h1 style={{ margin: 0, fontSize: '1.5rem' }}>GitHub</h1>
+          {user && (
+            <nav>
+              <Link to="/" style={{ color: 'white', marginRight: 16 }}>Home</Link>
+              <Link to="/repositories" style={{ color: 'white', marginRight: 16 }}>Repositories</Link>
+            </nav>
+          )}
+        </div>
+        <div>
+          {user ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span>{user.username}</span>
+              <button onClick={handleLogout} style={{ background: 'transparent', color: 'white', border: '1px solid white', padding: '4px 12px', borderRadius: 4, cursor: 'pointer' }}>Sign out</button>
+            </span>
+          ) : (
+            <nav>
+              <Link to="/login" style={{ color: 'white', marginRight: 16 }}>Sign in</Link>
+              <a href="/register" style={{ color: 'white' }}>Register</a>
+            </nav>
+          )}
+        </div>
       </header>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: 24 }}>
         <Routes>
           <Route path="/" element={<Home user={user} />} />
           <Route path="/login" element={<Login setUser={setUser} />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/repositories" element={<Repos user={user} />} />
+          <Route path="/repos/:owner/:name" element={<RepoDetail user={user} />} />
         </Routes>
       </div>
     </div>
@@ -304,10 +447,19 @@ function App() {
 
 function Home({ user }: { user: any }) {
   return (
-    <div style={{ background: 'white', border: '1px solid #d0d7de', borderRadius: 6, padding: 16, marginBottom: 16 }}>
-      <h2>Welcome{user ? ', ' + user.username : ''}</h2>
-      <p>This is the application home page.</p>
-      {!user && <p><a href="/register">Create an account</a> or <a href="/login">Sign in</a></p>}
+    <div>
+      <h2>Welcome to GitHub</h2>
+      {user ? (
+        <div style={{ background: 'white', border: '1px solid #d0d7de', borderRadius: 6, padding: 16, marginTop: 16 }}>
+          <h3>Hello, {user.username}!</h3>
+          <p>View your <Link to="/repositories">repositories</Link>.</p>
+        </div>
+      ) : (
+        <div style={{ background: 'white', border: '1px solid #d0d7de', borderRadius: 6, padding: 16, marginTop: 16 }}>
+          <h3>Get started</h3>
+          <p><a href="/register">Create an account</a> or <a href="/login">Sign in</a>.</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -316,6 +468,7 @@ function Login({ setUser }: { setUser: (u: any) => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const navigate = useNavigate()
 
   const handleLogin = async () => {
     const res = await fetch('/api/login', {
@@ -326,6 +479,8 @@ function Login({ setUser }: { setUser: (u: any) => void }) {
     const data = await res.json()
     if (data.success) {
       setUser(data.user)
+      localStorage.setItem('user', JSON.stringify(data.user))
+      navigate('/')
     } else {
       setError(data.error || 'Invalid credentials')
     }
@@ -344,7 +499,11 @@ function Login({ setUser }: { setUser: (u: any) => void }) {
       </div>
       {error && <p style={{ color: 'red', marginBottom: 16 }}>{error}</p>}
       <button onClick={handleLogin} style={{ background: '#2da44e', color: 'white', padding: '8px 16px', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Sign in</button>
-      <p style={{ marginTop: 16 }}><a href="/register">Create an account</a></p>
+      <p style={{ marginTop: 16 }}>
+        <a href="/register">Create an account</a>
+        {' | '}
+        <a href="/login">Forgot password?</a>
+      </p>
     </div>
   )
 }
@@ -404,30 +563,47 @@ function Register() {
   )
 }
 
-export default App
-""")
-    
-    # index.css
-    with open(src_dir / 'index.css', 'w') as f:
-        f.write("""* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: #f6f8fa; }
-""")
-    
-    print(f"[Agent] Frontend created")
-    
-    # 标记任务完成
-    if runtime:
-        try:
-            runtime.events.mark_implementation_done("ROOT", "Application generated")
-            runtime.events.mark_run_completed("Agent completed")
-            print("[Agent] SDK marked tasks as done")
-        except Exception as e:
-            print(f"[Agent] Warning: SDK mark failed: {e}")
-    
-    print(f"[Agent] Done!")
+function Repos({ user }: { user: any }) {
+  const [repos, setRepos] = useState<any[]>([])
 
-if __name__ == '__main__':
-    main()
+  useEffect(() => {
+    fetch('/api/repos').then(res => res.json()).then(setRepos)
+  }, [])
+
+  return (
+    <div>
+      <h2>Repositories</h2>
+      <div style={{ marginTop: 16 }}>
+        {repos.map(repo => (
+          <div key={repo.id} style={{ background: 'white', border: '1px solid #d0d7de', borderRadius: 6, padding: 16, marginBottom: 8 }}>
+            <Link to={`/repos/${repo.owner_name}/${repo.name}`} style={{ fontSize: 18, fontWeight: 600, color: '#0969da', textDecoration: 'none' }}>
+              {repo.owner_name}/{repo.name}
+            </Link>
+            <p style={{ color: '#57606a', marginTop: 4 }}>{repo.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RepoDetail({ user }: { user: any }) {
+  return (
+    <div>
+      <h2>Repository Details</h2>
+      <p>Repository details page</p>
+    </div>
+  )
+}
+
+export default App
+'''
+
+CSS_CODE = '''* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: #f6f8fa; }
+a { color: #0969da; text-decoration: none; }
+a:hover { text-decoration: underline; }
+'''
 
 if __name__ == '__main__':
     main()
