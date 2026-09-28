@@ -286,8 +286,8 @@ function App() {
         <h1 style={{ margin: 0, fontSize: '1.5rem' }}>Application</h1>
         <nav>
           <Link to="/" style={{ color: 'white', marginRight: 16 }}>Home</Link>
-          {!user && <Link to="/login" style={{ color: 'white', marginRight: 16 }}>Login</Link>}
-          {!user && <Link to="/register" style={{ color: 'white', marginRight: 16 }}>Register</Link>}
+          {!user && <a href="/register" style={{ color: 'white', marginRight: 16 }}>Register</a>}
+          {!user && <a href="/login" style={{ color: 'white', marginRight: 16 }}>Sign in</a>}
           {user && <span style={{ color: 'white' }}>{user.username}</span>}
         </nav>
       </header>
@@ -307,6 +307,7 @@ function Home({ user }: { user: any }) {
     <div style={{ background: 'white', border: '1px solid #d0d7de', borderRadius: 6, padding: 16, marginBottom: 16 }}>
       <h2>Welcome{user ? ', ' + user.username : ''}</h2>
       <p>This is the application home page.</p>
+      {!user && <p><a href="/register">Create an account</a> or <a href="/login">Sign in</a></p>}
     </div>
   )
 }
@@ -332,18 +333,18 @@ function Login({ setUser }: { setUser: (u: any) => void }) {
 
   return (
     <div style={{ background: 'white', border: '1px solid #d0d7de', borderRadius: 6, padding: 16, maxWidth: 400, margin: '0 auto' }}>
-      <h2>Login</h2>
+      <h2>Sign in</h2>
       <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Username or email</label>
-        <input type="text" value={username} onChange={e => setUsername(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d0d7de', borderRadius: 4 }} />
+        <label htmlFor="username" style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Username or email</label>
+        <input id="username" type="text" value={username} onChange={e => setUsername(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d0d7de', borderRadius: 4 }} />
       </div>
       <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Password</label>
-        <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d0d7de', borderRadius: 4 }} />
+        <label htmlFor="password" style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Password</label>
+        <input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d0d7de', borderRadius: 4 }} />
       </div>
       {error && <p style={{ color: 'red', marginBottom: 16 }}>{error}</p>}
-      <button onClick={handleLogin} style={{ background: '#2da44e', color: 'white', padding: '8px 16px', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Login</button>
-      <p style={{ marginTop: 16 }}><Link to="/register">Create an account</Link></p>
+      <button onClick={handleLogin} style={{ background: '#2da44e', color: 'white', padding: '8px 16px', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Sign in</button>
+      <p style={{ marginTop: 16 }}><a href="/register">Create an account</a></p>
     </div>
   )
 }
@@ -372,23 +373,23 @@ function Register() {
     <div style={{ background: 'white', border: '1px solid #d0d7de', borderRadius: 6, padding: 16, maxWidth: 400, margin: '0 auto' }}>
       <h2>Create an account</h2>
       <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Username</label>
-        <input type="text" value={form.username} onChange={e => update('username', e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d0d7de', borderRadius: 4 }} />
+        <label htmlFor="reg-username" style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Username</label>
+        <input id="reg-username" type="text" value={form.username} onChange={e => update('username', e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d0d7de', borderRadius: 4 }} />
         {errors.username && <p style={{ color: 'red', marginTop: 4 }}>{errors.username}</p>}
       </div>
       <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Email</label>
-        <input type="email" value={form.email} onChange={e => update('email', e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d0d7de', borderRadius: 4 }} />
+        <label htmlFor="reg-email" style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Email</label>
+        <input id="reg-email" type="email" value={form.email} onChange={e => update('email', e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d0d7de', borderRadius: 4 }} />
         {errors.email && <p style={{ color: 'red', marginTop: 4 }}>{errors.email}</p>}
       </div>
       <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Password</label>
-        <input type="password" value={form.password} onChange={e => update('password', e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d0d7de', borderRadius: 4 }} />
+        <label htmlFor="reg-password" style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Password</label>
+        <input id="reg-password" type="password" value={form.password} onChange={e => update('password', e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d0d7de', borderRadius: 4 }} />
         {errors.password && <p style={{ color: 'red', marginTop: 4 }}>{errors.password}</p>}
       </div>
       <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Confirm password</label>
-        <input type="password" value={form.confirm_password} onChange={e => update('confirm_password', e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d0d7de', borderRadius: 4 }} />
+        <label htmlFor="reg-confirm" style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Confirm password</label>
+        <input id="reg-confirm" type="password" value={form.confirm_password} onChange={e => update('confirm_password', e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d0d7de', borderRadius: 4 }} />
         {errors.confirm_password && <p style={{ color: 'red', marginTop: 4 }}>{errors.confirm_password}</p>}
       </div>
       <div style={{ marginBottom: 16 }}>
