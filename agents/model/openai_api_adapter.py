@@ -116,7 +116,7 @@ def build_openai_chat_model(
     kwargs: dict[str, Any] = {
         "model": config.model_name,
         "max_retries": 0,  # One bounded retry policy, not nested SDK retries.
-        "timeout": positive_setting("ARC_MODEL_REQUEST_TIMEOUT", 120),
+        "timeout": positive_setting("ARC_MODEL_REQUEST_TIMEOUT", 300),
         "disable_streaming": True,
         "stream_usage": False,
         "use_responses_api": config.api_mode == "responses",
