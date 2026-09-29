@@ -114,8 +114,11 @@ class RetryTests(unittest.IsolatedAsyncioTestCase):
         manager._log = AsyncMock()
         error = ARCModelAPIError("exhausted", api_mode="chat_completions", model="test")
         manager._run_task = AsyncMock(side_effect=error)
-        with self.assertRaises(ARCModelAPIError):
-            await manager.compile_requirement_tree({"id": "ROOT"})
+        # A platform-owned variable with the previous generic name must not
+        # shorten ARC's stage deadline and bypass the model retry policy.
+        with patch.dict(os.environ, {"ARC_PHASE_TIMEOUT": "0.001"}):
+            with self.assertRaises(ARCModelAPIError):
+                await manager.compile_requirement_tree({"id": "ROOT"})
         self.assertEqual(snapshots[-1]["tasks"][0]["status"], "RUNNING")
         self.assertEqual(snapshots[-1]["tasks"][0]["last_error"], "ARCModelAPIError")
         manager.runtime.events.mark_run_failed.assert_called_once()

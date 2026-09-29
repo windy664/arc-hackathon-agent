@@ -12,7 +12,7 @@ connection reset by peer，流回退后再次失败并退出。
 - 重试耗尽仍报告失败，保存队列与产物；中断任务保留 RUNNING，供已有恢复逻辑处理。
 - 不修改测试判分，不伪造通过，不自动改用其他网关或模型。
 
-可通过 `ARC_MODEL_MAX_ATTEMPTS`、`ARC_MODEL_REQUEST_TIMEOUT`、`ARC_PHASE_TIMEOUT`
+可通过 `ARC_MODEL_MAX_ATTEMPTS`、`ARC_MODEL_REQUEST_TIMEOUT`、`ARC_AGENT_STAGE_TIMEOUT`
 配置尝试次数、请求超时秒数、阶段超时秒数。
 
 上传 ZIP 时选择 Python，包根目录包含 main.py 和 requirements.txt。
