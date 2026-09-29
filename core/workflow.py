@@ -470,7 +470,9 @@ class ARCWorkflowManager:
                     self._run_task(task),
                     # Keep our setting names private to ARC so a runner's generic
                     # ARC_PHASE_TIMEOUT cannot terminate an in-flight model call.
-                    timeout=positive_setting("ARC_AGENT_STAGE_TIMEOUT", 1800),
+                    # A requirement stage may need many model/tool round trips;
+                    # the per-request timeout bounds stalled calls separately.
+                    timeout=positive_setting("ARC_AGENT_STAGE_TIMEOUT", 10800),
                 )
             except (ARCModelAPIError, TimeoutError) as exc:
                 # Leave RUNNING for the existing interrupted-queue recovery path.

@@ -116,9 +116,17 @@ class RetryTests(unittest.IsolatedAsyncioTestCase):
         manager._run_task = AsyncMock(side_effect=error)
         # A platform-owned variable with the previous generic name must not
         # shorten ARC's stage deadline and bypass the model retry policy.
+        wait_timeouts = []
+        from core import workflow
+        original_wait_for = workflow.asyncio.wait_for
+        async def capture_timeout(awaitable, timeout):
+            wait_timeouts.append(timeout)
+            return await original_wait_for(awaitable, timeout=timeout)
         with patch.dict(os.environ, {"ARC_PHASE_TIMEOUT": "0.001"}):
-            with self.assertRaises(ARCModelAPIError):
-                await manager.compile_requirement_tree({"id": "ROOT"})
+            with patch("core.workflow.asyncio.wait_for", side_effect=capture_timeout):
+                with self.assertRaises(ARCModelAPIError):
+                    await manager.compile_requirement_tree({"id": "ROOT"})
+        self.assertEqual(wait_timeouts, [10800])
         self.assertEqual(snapshots[-1]["tasks"][0]["status"], "RUNNING")
         self.assertEqual(snapshots[-1]["tasks"][0]["last_error"], "ARCModelAPIError")
         manager.runtime.events.mark_run_failed.assert_called_once()
