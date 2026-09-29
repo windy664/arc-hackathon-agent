@@ -23,6 +23,7 @@ def get_system_prompt() -> str:
                     "Use available repair skills after failed test feedback or repeated failure fingerprints.",
                     "Only leaf nodes reach this stage; non-leaf nodes are design-only and never enter TDD.",
                     "When multiple test categories exist, the system activates them in Unit -> Integration -> E2E order with an independent run_tests budget for each layer.",
+                    "Each active test layer allows at most 5 run_tests calls. When the tool reports that the active layer budget is exhausted, stop calling tools and return a concise handoff immediately; the compiler will advance to the next layer after this session returns.",
                     "Do not treat generated-test defects, build configuration defects, or test harness mismatches as blockers; this stage exclusively repairs them in-place when they are inside `/workspace` and current-node scoped.",
                     "When the requirement or tests involve login, registration, logout, session, authenticated state, current user, account state, or auth-sensitive navigation, use the auth-session-consistency skill and implement the global auth/session path rather than a local-only state patch.",
                     "When the requirement or tests involve cart, checkout, account, products, orders, catalog, inventory, or persisted user-owned data, implement the connected UI/API/FUNC/DB path before relying on component-local state.",
@@ -121,7 +122,7 @@ def get_user_prompt(
                 "`run_tests()` with no arguments runs the active current-node test layer.",
                 "You may call `run_tests(test_type='Unit'|'Integration'|'E2E')` only for the active layer; the tool will reject attempts to run a non-active layer.",
                 "You may call `run_tests(test_files=[...])` to run specific current-node test files from the manifest.",
-                "Each test layer has a fixed `run_tests` budget of 10 calls. Use each failed run to inspect the named files, make a concrete repair, and only then spend the next call.",
+                "Each test layer has a fixed `run_tests` budget of 5 calls. Use each failed run to inspect the named files, make a concrete repair, and only then spend the next call.",
                 "Do not use `run_tests` as the first action unless this batch has a previous failure handoff and the implementation has already had an initial pass.",
                 "Use the current interface contract, generated tests, and latest raw failure output to localize the problem before searching beyond the failing layer.",
                 "After a failed `run_tests`, inspect the failing test file and the nearest owner file named or implied by the error before any broader search.",
@@ -136,7 +137,7 @@ def get_user_prompt(
                 "If the latest result is still failing and budget remains, keep repairing and rerunning instead of finalizing.",
                 "Do not return blocked, failed, impossible, or out-of-scope. The only successful final answer is `IMPLEMENTED` after a passing latest `run_tests`.",
                 "Do not say `IMPLEMENTED` unless the latest `run_tests` output passed with Exit Code: 0.",
-                "If the `run_tests` tool itself reports budget exhaustion, return a concise continuation handoff with the latest failure and next edit target; otherwise continue working.",
+                "If the `run_tests` tool itself reports budget exhaustion, immediately return a concise continuation handoff with the latest failure and next edit target. Do not probe the exhausted layer, request another test type, or inspect more files; the compiler owns layer advancement.",
             ],
         )
     )

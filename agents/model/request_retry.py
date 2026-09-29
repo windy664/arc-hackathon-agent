@@ -50,9 +50,7 @@ def retry_delay(attempt: int) -> float:
 
 
 async def request_async(call):
-    # Allow two retries after the initial attempt: a single transient outage
-    # should not abort a long-running agent stage after one failed retry.
-    attempts = int(positive_setting("ARC_MODEL_MAX_ATTEMPTS", 3))
+    attempts = int(positive_setting("ARC_MODEL_MAX_ATTEMPTS", 2))
     if attempts < 1:
         raise ValueError("ARC_MODEL_MAX_ATTEMPTS must be at least 1")
     timeout = positive_setting("ARC_MODEL_REQUEST_TIMEOUT", 300)
@@ -70,7 +68,7 @@ async def request_async(call):
 
 
 def request_sync(call):
-    attempts = int(positive_setting("ARC_MODEL_MAX_ATTEMPTS", 3))
+    attempts = int(positive_setting("ARC_MODEL_MAX_ATTEMPTS", 2))
     if attempts < 1:
         raise ValueError("ARC_MODEL_MAX_ATTEMPTS must be at least 1")
     for attempt in range(1, attempts + 1):

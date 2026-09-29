@@ -591,8 +591,8 @@ class WorkflowPhaseRunner:
                     test_type=ordered_type,
                     node_tests=tests,
                     previous_failure_summary=previous_failure_summary,
-                    run_tests_budget=None,
-                    run_tests_usage=None,
+                    run_tests_budget=TDD_RUN_TESTS_BUDGET,
+                    run_tests_usage={},
                     run_tests_executor=run_requested_tests,
                 )
 
