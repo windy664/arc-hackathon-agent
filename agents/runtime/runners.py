@@ -10,6 +10,7 @@ from typing import Any, Awaitable, Callable
 from pydantic import BaseModel
 
 from agents.runtime.contracts import AgentRuntimeContext
+from agents.model.openai_api_adapter import ARCModelAPIError
 from core.logging import format_json_for_log, log_to_logger
 
 
@@ -228,6 +229,8 @@ async def _try_astream_stage_agent(
             )
             if isinstance(maybe_state, dict):
                 final_state = maybe_state
+    except ARCModelAPIError:
+        raise  # Request retries are exhausted; never replay completed tool calls.
     except Exception as exc:
         await _emit_log(
             log_cb,
@@ -326,6 +329,8 @@ def _try_stream_stage_agent_sync(
             return None
         _log_agent_trace_sync(log_cb, final_state, label=run_label, thread_id=thread_id, node_id=context.node_id)
         return extract_payload(final_state)
+    except ARCModelAPIError:
+        raise
     except Exception as exc:
         _emit_log_sync(
             log_cb,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import asyncio
 import shutil
 import hashlib
 import json
@@ -8,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from agents.model.openai_api_adapter import ARCModelAPIError
+from agents.model.request_retry import positive_setting
 from agents.interface_designer import InterfaceDesigner
 from agents.test_driven_developer import TestDrivenDeveloper
 from agents.test_generator import TestGenerator
@@ -462,7 +465,23 @@ class ARCWorkflowManager:
             self._save_processing_queue(queue_state)
 
             await self._log("Compiler", f"Running {phase} for node {node_id}...", node_id=node_id)
-            task_ok = await self._run_task(task)
+            try:
+                task_ok = await asyncio.wait_for(
+                    self._run_task(task),
+                    timeout=positive_setting("ARC_PHASE_TIMEOUT", 1800),
+                )
+            except (ARCModelAPIError, TimeoutError) as exc:
+                # Leave RUNNING for the existing interrupted-queue recovery path.
+                # That path preserves artifacts, unlike resetting a failed design.
+                task["last_error"] = type(exc).__name__
+                self._save_processing_queue(queue_state)
+                self.runtime.events.mark_run_failed(
+                    f"{phase} interrupted for {node_id}: {type(exc).__name__}. "
+                    "Workspace saved; resume with --resume using the same output directory."
+                )
+                await self._log("Compiler", "Model/phase failure; saved queue and artifacts for --resume.",
+                                "error", node_id)
+                raise
 
             if task_ok:
                 task["status"] = TASK_COMPLETED

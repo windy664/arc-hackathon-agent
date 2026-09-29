@@ -10,6 +10,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import PrivateAttr
 
 from agents.model.compatible_openai import CompatibleChatOpenAI
+from agents.model.request_retry import request_async, request_sync, positive_setting
 
 
 OpenAIAPIMode = Literal["responses", "chat_completions"]
@@ -60,13 +61,15 @@ class ARCChatOpenAI(ChatOpenAI):
 
     async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):  # type: ignore[override]
         try:
-            return await super()._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
+            generate = super()._agenerate
+            return await request_async(lambda: generate(messages, stop=stop, run_manager=run_manager, **kwargs))
         except Exception as exc:
             _raise_model_api_exception(exc, api_mode=self._arc_api_mode, model=self._arc_model_name)
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # type: ignore[override]
         try:
-            return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+            generate = super()._generate
+            return request_sync(lambda: generate(messages, stop=stop, run_manager=run_manager, **kwargs))
         except Exception as exc:
             _raise_model_api_exception(exc, api_mode=self._arc_api_mode, model=self._arc_model_name)
 
@@ -84,13 +87,15 @@ class ARCCompatibleChatOpenAI(CompatibleChatOpenAI):
 
     async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):  # type: ignore[override]
         try:
-            return await super()._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
+            generate = super()._agenerate
+            return await request_async(lambda: generate(messages, stop=stop, run_manager=run_manager, **kwargs))
         except Exception as exc:
             _raise_model_api_exception(exc, api_mode=self._arc_api_mode, model=self._arc_model_name)
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # type: ignore[override]
         try:
-            return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+            generate = super()._generate
+            return request_sync(lambda: generate(messages, stop=stop, run_manager=run_manager, **kwargs))
         except Exception as exc:
             _raise_model_api_exception(exc, api_mode=self._arc_api_mode, model=self._arc_model_name)
 
@@ -110,6 +115,8 @@ def build_openai_chat_model(
     )
     kwargs: dict[str, Any] = {
         "model": config.model_name,
+        "max_retries": 0,  # One bounded retry policy, not nested SDK retries.
+        "timeout": positive_setting("ARC_MODEL_REQUEST_TIMEOUT", 120),
         "disable_streaming": True,
         "stream_usage": False,
         "use_responses_api": config.api_mode == "responses",
@@ -209,6 +216,8 @@ def _wrap_model_api_exception(exc: Exception, *, api_mode: OpenAIAPIMode, model:
 
 
 def _is_model_api_exception(exc: Exception) -> bool:
+    if isinstance(exc, TimeoutError):
+        return True
     return isinstance(
         exc,
         (
