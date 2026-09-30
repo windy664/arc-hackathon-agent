@@ -11,6 +11,7 @@ import inspect
 from typing import Awaitable, Callable
 
 from .base import AppTypeHandler
+from .web_template import repair_sqlite_initialization
 from core.config import build_web_runtime_env, get_web_base_url, get_web_port
 from core.processes import finalize_subprocess
 
@@ -688,6 +689,14 @@ async def _start_backend_runtime(
 
 class WebAppType(AppTypeHandler):
     name = "web"
+
+    async def repair_workspace(self) -> None:
+        if repair_sqlite_initialization(self.workspace_path):
+            await self._log(
+                "System",
+                "Repaired SQLite initialization in backend/src/database/init_db.js: "
+                "cached initialization now returns the database connection.",
+            )
 
     @classmethod
     def prerequisite_commands(cls) -> list[str]:

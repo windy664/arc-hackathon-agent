@@ -267,6 +267,14 @@ class ARCWorkflowManager:
         # Backfill metadata for workspaces created before project.json existed.
         if not metadata:
             self._save_project_metadata()
+        app_handler = create_app_type_handler(
+            workspace_path=self.workspace_path,
+            requirement_path=self.requirement_path,
+            app_type=self.app_type,
+            interface_designer=self.interface_designer,
+            log_cb=self.log_cb,
+        )
+        await app_handler.repair_workspace()
         self.runtime.events.mark_run_resumed("ARC compilation resumed from processing queue.")
 
     async def start_compilation(

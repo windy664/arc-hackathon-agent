@@ -67,6 +67,7 @@ class AppTypeHandler(ABC):
                 "Existing application detected; preserving it as the compilation baseline and skipping template scaffolding.",
             )
 
+        await self.repair_workspace()
         await self.install_dependencies()
         return True
 
@@ -109,6 +110,10 @@ class AppTypeHandler(ABC):
 
     async def post_template_setup(self) -> bool:
         return True
+
+    async def repair_workspace(self) -> None:
+        """Apply known scaffold fixes to both prepared and resumed workspaces."""
+        return None
 
     async def install_dependencies(self) -> None:
         return None
