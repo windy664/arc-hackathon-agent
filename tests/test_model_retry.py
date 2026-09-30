@@ -10,6 +10,7 @@ from langchain_openai import ChatOpenAI
 from agents.model.request_retry import is_transient, request_async, request_sync
 from agents.model.openai_api_adapter import build_openai_chat_model, ARCModelAPIError
 from agents.runtime.runners import _try_astream_stage_agent
+from agents.runtime.factory import _resolve_response_format
 from types import SimpleNamespace
 
 
@@ -83,6 +84,13 @@ class RetryTests(unittest.IsolatedAsyncioTestCase):
         with patch("agents.model.request_retry.time.sleep"):
             self.assertEqual(request_sync(call), "ok")
         self.assertEqual(call.call_count, 2)
+
+    def test_arc_bench_endpoint_keeps_structured_response_format(self):
+        schema = {"type": "json_schema", "json_schema": {"name": "result"}}
+        with patch.dict(os.environ, {"OPENAI_BASE_URL": "https://api.arc-bench.com/v1"}, clear=True):
+            self.assertIs(_resolve_response_format(schema), schema)
+        with patch.dict(os.environ, {"OPENAI_BASE_URL": "https://api.taotoken.net/v1"}, clear=True):
+            self.assertIsNone(_resolve_response_format(schema))
 
     async def test_model_failure_does_not_trigger_stage_fallback(self):
         error = ARCModelAPIError("exhausted", api_mode="chat_completions", model="test")

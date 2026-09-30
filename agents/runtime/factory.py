@@ -357,7 +357,11 @@ def _apply_windows_filesystem_path_compat() -> None:
 
 def _is_openai_base_url(base_url: str) -> bool:
     host = urlparse(base_url).hostname or ""
-    return host == "api.openai.com" or host.endswith(".openai.com")
+    return (
+        host == "api.openai.com"
+        or host.endswith(".openai.com")
+        or host == "api.arc-bench.com"
+    )
 
 
 def _resolve_source_paths(paths: list[str] | None, root: Path, skills_root: Path, *, default: list[str]) -> list[str]:
