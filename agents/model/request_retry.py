@@ -53,7 +53,10 @@ async def request_async(call):
     attempts = int(positive_setting("ARC_MODEL_MAX_ATTEMPTS", 2))
     if attempts < 1:
         raise ValueError("ARC_MODEL_MAX_ATTEMPTS must be at least 1")
-    timeout = positive_setting("ARC_MODEL_REQUEST_TIMEOUT", 300)
+    # Larger reasoning models can legitimately take several minutes on a
+    # long tool-using request. Keep the timeout bounded, but don't discard a
+    # Kimi/other provider response at the previous five-minute mark.
+    timeout = positive_setting("ARC_MODEL_REQUEST_TIMEOUT", 600)
     for attempt in range(1, attempts + 1):
         try:
             return await asyncio.wait_for(call(), timeout=timeout)
