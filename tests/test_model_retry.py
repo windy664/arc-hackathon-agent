@@ -33,6 +33,17 @@ class RetryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await request_async(call), "ok")
         self.assertEqual(call.await_count, 3)
 
+    async def test_rate_limit_uses_longer_cooldown_and_more_attempts(self):
+        class EngineOverloaded(RuntimeError):
+            status_code = 429
+
+        call = AsyncMock(side_effect=[EngineOverloaded("busy") for _ in range(3)] + ["ok"])
+        with patch("agents.model.request_retry.retry_delay", return_value=0) as delay:
+            self.assertEqual(await request_async(call), "ok")
+        self.assertEqual(call.await_count, 4)
+        self.assertEqual(delay.call_args_list[0].args[0], 1)
+        self.assertEqual(delay.call_args_list[0].args[1].status_code, 429)
+
     async def test_bad_parameters_are_not_retried(self):
         for error in [provider_error("invalid_request_error", "invalid model"),
                       provider_error("proxy_error", "invalid request schema")]:

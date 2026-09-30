@@ -62,7 +62,10 @@ async function initializeDatabase(options = {}) {
     await resetDatabaseFile();
   }
   if (initPromise) {
-    return initPromise;
+    await initPromise;
+    // The initialization promise only resolves after schema setup; callers
+    // must still receive the sqlite connection, just like the first caller.
+    return getDb();
   }
 
   const database = getDb();
