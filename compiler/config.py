@@ -6,12 +6,12 @@ import os
 import threading
 import time
 
-# Defaults follow the leaderboard's efficient agentic band (per run):
-# gaoyu06 ~5M tok / 45 min, Iris ~0.6M / 13 min, pingguomiaomiao ~10M / 64 min.
-# Anything far beyond this band is the burn zone (116M tok / 8 h -> 402).
+# Defaults follow the leaderboard's normal mid-table band (aggregate view):
+# teams at 36-66% pass spend ~11-20 CNY per run (~10-20M tokens on flash).
+# The burn zone is an order of magnitude above: one 116M-token run -> 478 CNY -> 402.
 MAX_REQUESTS = int(os.environ.get("ARCBENCH_MAX_MODEL_REQUESTS", "36"))
-MAX_TOTAL_TOKENS = int(os.environ.get("ARCBENCH_MAX_TOTAL_TOKENS", "8000000"))
-MAX_SECONDS = int(os.environ.get("ARCBENCH_MAX_SECONDS", "4200"))
+MAX_TOTAL_TOKENS = int(os.environ.get("ARCBENCH_MAX_TOTAL_TOKENS", "20000000"))
+MAX_SECONDS = int(os.environ.get("ARCBENCH_MAX_SECONDS", "5400"))
 MAX_OUTPUT_TOKENS = 12000
 REQUEST_TIMEOUT = 180
 

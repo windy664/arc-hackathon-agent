@@ -7,7 +7,7 @@ ARC-Bench run monitor — 每 3 分钟轮询一次运行状态：
 
 用法:
   python3 monitor.py <run_id> [--interval 180] [--budget-cny 500]
-                     [--warn-cny 8] [--stop-cny 15] [--outdir /tmp/arc-monitor]
+                     [--warn-cny 25] [--stop-cny 50] [--outdir /tmp/arc-monitor]
 """
 import argparse
 import http.cookiejar
@@ -93,10 +93,11 @@ def main():
     ap.add_argument("run_id")
     ap.add_argument("--interval", type=int, default=180)
     ap.add_argument("--budget-cny", type=float, default=500.0)
-    # efficient per-run band on the leaderboard is ~1-3 CNY (Iris 0.1, gaoyu06 1,
-    # pingguomiaomiao 2); warn early, stop before a run eats the team budget.
-    ap.add_argument("--warn-cny", type=float, default=8.0)
-    ap.add_argument("--stop-cny", type=float, default=15.0)
+    # normal mid-table runs cost ~11-20 CNY (aggregate view: 36-66% teams spend
+    # 66-120 CNY over ~6 submissions); warn beyond the band, stop before an
+    # accident (the 478 CNY burnout run would trip this in its first hour).
+    ap.add_argument("--warn-cny", type=float, default=25.0)
+    ap.add_argument("--stop-cny", type=float, default=50.0)
     ap.add_argument("--outdir", default="/tmp/arc-monitor")
     args = ap.parse_args()
 
