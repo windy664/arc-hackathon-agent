@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .assemble import fallback_backend, fallback_home, write_backend, write_frontend
-from .config import BUDGET, MAX_REPAIR_AREAS, log, sdk_event
+from .config import BUDGET, MAX_REPAIR_AREAS, log
 from .generate import (
     generate_backend,
     generate_design,
@@ -14,6 +14,7 @@ from .generate import (
 )
 from .model import ModelClient
 from .repair import repair_area, verify_sources
+from .report import Reporter
 from .requirements import (
     collect_atomics,
     derive_contract,
@@ -34,7 +35,8 @@ def run(source: Path, out: Path) -> None:
     log(f"requirements: {source}")
     log(f"output: {out}")
     log(f"budget: {BUDGET.status()}")
-    sdk_event("mark_run_started", "requirement compiler started")
+    reporter = Reporter(out)
+    reporter.run_started("requirement compiler started")
 
     data, req_dir = load_requirements(source)
     atomics: list[dict] = []
@@ -42,6 +44,7 @@ def run(source: Path, out: Path) -> None:
     if not atomics:
         raise SystemExit("no ATOMIC requirements found")
     log(f"atomics: {len(atomics)}")
+    reporter.store_tree(data)
 
     images = find_reference_images(atomics, req_dir)
     contract = derive_contract(atomics)
@@ -53,6 +56,7 @@ def run(source: Path, out: Path) -> None:
 
     design = generate_design(client, atomics)
     log(f"design pages: {len(design.get('pages') or [])} api: {len(design.get('api') or [])} {BUDGET.status()}")
+    reporter.design_done([a["id"] for a in atomics], "design complete")
 
     backend_code = generate_backend(client, design, atomics)
     if backend_code and "express" in backend_code:
@@ -81,6 +85,14 @@ def run(source: Path, out: Path) -> None:
             pages.append((comp, code))
             comp_of_area[area["key"]] = comp
             log(f"page {comp} written ({len(code)} chars) {BUDGET.status()}")
+            reporter.implement_started(area["req_ids"], f"generating {comp}")
+            reporter.implement_done(area["req_ids"], f"{comp} generated")
+            reporter.interface(
+                f"{area['req_ids'][0]}.UI.{comp}" if area["req_ids"] else f"UI.{comp}",
+                area["req_ids"],
+                f"UI area {area['key']} rendered by {comp}",
+                f"frontend/src/pages/{comp}.tsx",
+            )
     if not pages:
         pages.append(("HomePage", fallback_home(contract)))
         comp_of_area[areas[0]["key"]] = "HomePage"
@@ -154,6 +166,17 @@ def run(source: Path, out: Path) -> None:
             ok_build, build_note = npm_install_and_build(out)
             log(f"rebuild after repair: {ok_build} ({build_note})")
 
-    sdk_event("mark_implementation_done", f"generated {len(pages)} pages, {BUDGET.status()}")
-    sdk_event("mark_run_completed", "requirement compiler finished")
+    # ---- final (free) re-check drives the reported test state per area ----
+    final_problems = verify_sources(out, contract, areas, comp_of_area)
+    failing_areas = {p["area"] or areas[0]["key"] for p in final_problems}
+    for key, findings in findings_by_area.items():
+        if findings:
+            failing_areas.add(key)
+    for area in areas:
+        if area["key"] in failing_areas:
+            reporter.test_failed(area["req_ids"], "contract or visual review not satisfied")
+        elif area["req_ids"]:
+            reporter.test_passed(area["req_ids"], "contract and visual review satisfied")
+    log(f"final contract problems: {len(final_problems)}")
+    reporter.run_completed(f"generated {len(pages)} pages, {BUDGET.status()}")
     log(f"done {BUDGET.status()}")
