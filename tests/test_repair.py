@@ -93,6 +93,33 @@ def test_repair_area_uses_patch_script(mini_task: Path, tmp_path: Path, monkeypa
     assert "New blank workbook" in content
 
 
+def test_repair_area_falls_back_when_script_is_noop(mini_task: Path, tmp_path: Path, monkeypatch) -> None:
+    from compiler.repair import repair_area
+
+    monkeypatch.setenv("ARCBENCH_MOCK_MODEL", "1")
+    from compiler import model as model_mod
+
+    monkeypatch.setattr(model_mod, "MOCK_MODE", True)
+    out = tmp_path / "out"
+    pages = out / "frontend" / "src" / "pages"
+    pages.mkdir(parents=True)
+    # mock patch script replaces '<button>Action</button>' which does not match here,
+    # so the script path is a no-op and repair must fall back to the full-file round
+    (pages / "LandingPage.tsx").write_text(
+        "export default function LandingPage() {\n"
+        "  return <button type=\"button\">Action</button>\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    areas, _ = _areas(mini_task)
+    area = next(a for a in areas if a["key"] == "home.png")
+    ok = repair_area(model_mod.ModelClient(), out, "LandingPage", area,
+                     ["missing accessible name: New blank workbook"])
+    assert ok
+    content = (pages / "LandingPage.tsx").read_text(encoding="utf-8")
+    assert "New blank workbook" in content
+
+
 def test_run_patch_script_rejects_broken_script(tmp_path: Path) -> None:
     from compiler.repair import _run_patch_script
 

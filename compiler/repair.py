@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .config import UI_EXTS
+from .config import BUDGET, UI_EXTS
 from .generate import SYSTEM_PROMPT, digest_requirements
 from .model import Conversation, ModelClient, extract_code, fit_text
 from .sandbox import check_patch_script
@@ -140,6 +140,10 @@ def repair_area(client: ModelClient, out: Path, comp: str, area: dict,
     if script and _looks_like_patch_script(script) and _run_patch_script(out, script, relpath):
         return True
 
+    if not BUDGET.allow():
+        return False
+    # fresh conversation so the fallback cannot be confused by the earlier script reply
+    conv = Conversation(client, SYSTEM_PROMPT, prefix)
     prompt = (
         f"Problems to fix:\n{problems}\n\n"
         f"Current file `{comp}.tsx` (may contain elision markers that are NOT content):\n"

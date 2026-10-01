@@ -6,6 +6,7 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -90,12 +91,49 @@ def wait_for_server(port: int, timeout: float = 30.0) -> bool:
     return False
 
 
+_chromium_bootstrapped = False
+
+
+def _ensure_chromium() -> bool:
+    """Launch chromium, downloading it once if the runtime has no browser yet."""
+    global _chromium_bootstrapped
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            browser.close()
+        return True
+    except Exception:
+        pass
+    if _chromium_bootstrapped:
+        return False
+    _chromium_bootstrapped = True
+    log("chromium missing; attempting one-time playwright install")
+    code, note = run_cmd(
+        [sys.executable, "-m", "playwright", "install", "chromium"], Path.cwd(), 600,
+    )
+    log(f"playwright install exit={code} ({note[-200:]})")
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            browser.close()
+        return True
+    except Exception as exc:
+        log(f"chromium still unavailable: {exc}")
+        return False
+
+
 def screenshot_pages(out: Path, metas: list[dict], port: int, shots_dir: Path) -> dict[str, Path]:
     shots: dict[str, Path] = {}
     try:
         from playwright.sync_api import sync_playwright
     except Exception as exc:
         log(f"playwright unavailable: {exc}")
+        return shots
+    if not _ensure_chromium():
         return shots
     shots_dir.mkdir(parents=True, exist_ok=True)
     try:
