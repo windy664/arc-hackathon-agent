@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .agents import EngineerTeam, ReviewerTeam
 from .assemble import fallback_backend, fallback_home, write_backend, write_frontend
 from .config import BUDGET, MAX_REPAIR_AREAS, log
 from .generate import (
     generate_backend,
     generate_design,
-    parallel_generate_pages,
     plan_ui_areas,
 )
 from .model import ModelClient
@@ -24,7 +24,6 @@ from .requirements import (
 from .visual import (
     free_port,
     npm_install_and_build,
-    parallel_visual_reviews,
     screenshot_pages,
     start_server,
     wait_for_server,
@@ -77,7 +76,8 @@ def run(source: Path, out: Path) -> None:
 
     pages: list[tuple[str, str]] = []
     comp_of_area: dict[str, str] = {}
-    for area, comp, code in parallel_generate_pages(client, areas, contract):
+    team = EngineerTeam(client, contract)
+    for area, comp, code in team.build_all(areas):
         if code and ("export" in code or "function" in code):
             pages.append((comp, code))
             comp_of_area[area["key"]] = comp
@@ -128,8 +128,9 @@ def run(source: Path, out: Path) -> None:
             if not BUDGET.allow() or BUDGET.time_left() < 120:
                 break
             review_items.append((area, area["images"][0], shots[comp], comp))
+        reviewers = ReviewerTeam(client)
         for (area, _ref, _shot, comp), verdict in zip(
-            review_items, parallel_visual_reviews(client, [i[:3] for i in review_items])
+            review_items, reviewers.review_all([i[:3] for i in review_items])
         ):
             status = "OK" if verdict.get("ok") else f"{len(verdict.get('missing_or_wrong', []))} diffs"
             log(f"visual review {comp}: {status} {BUDGET.status()}")

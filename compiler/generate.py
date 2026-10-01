@@ -3,15 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
 import re
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .config import BUDGET
 from .model import ModelClient, extract_code, extract_json
-
-PARALLEL_WORKERS = max(1, int(os.environ.get("ARCBENCH_PARALLEL_WORKERS", "4")))
 
 SYSTEM_PROMPT = (
     "You are a senior full-stack engineer. You generate complete, runnable web "
@@ -143,20 +138,3 @@ def generate_page(client: ModelClient, area: dict, contract: dict) -> tuple[str,
     )
     code = extract_code(client.chat(prompt, system=SYSTEM_PROMPT, images=images or None))
     return comp, code
-
-
-def parallel_generate_pages(client: ModelClient, areas: list[dict],
-                            contract: dict) -> list[tuple[dict, str, str]]:
-    """Generate independent UI areas concurrently.
-
-    Results stay aligned with the input `areas` order so assembly is
-    deterministic; token cost is identical to the sequential path.
-    """
-    def work(area: dict) -> tuple[dict, str, str]:
-        if not BUDGET.allow():
-            return area, "", ""
-        comp, code = generate_page(client, area, contract)
-        return area, comp, code
-
-    with ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as pool:
-        return list(pool.map(work, areas))

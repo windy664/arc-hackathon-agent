@@ -72,9 +72,9 @@ def _mock_reply(messages: list[dict]) -> str:
         )
     if "React page component" in text:
         name = "HomePage"
-        m = re.search(r"named `([A-Za-z0-9]+)`", text)
-        if m:
-            name = m.group(1)
+        matches = re.findall(r"named `([A-Za-z0-9]+)`", text)
+        if matches:
+            name = matches[-1]
         return (
             f"```tsx\n"
             f"export default function {name}() {{\n"
@@ -92,7 +92,10 @@ def _mock_reply(messages: list[dict]) -> str:
         })
     if "Python script that fixes" in text:
         candidates = re.findall(r"`([^`]+\.tsx)`", text)
-        rel = next((c for c in candidates if "/" in c), candidates[-1] if candidates else "frontend/src/pages/Page.tsx")
+        with_path = [c for c in candidates if "/" in c]
+        rel = with_path[-1] if with_path else (
+            candidates[-1] if candidates else "frontend/src/pages/Page.tsx"
+        )
         return (
             "```python\n"
             "from pathlib import Path\n"
