@@ -21,18 +21,43 @@ from compiler.pipeline import run
 
 
 def parse_args(argv: list[str]) -> tuple[Path, Path]:
-    if not argv:
-        raise SystemExit("Usage: main.py <requirements_source> --output-dir <dir>")
-    source = Path(argv[0])
-    out = Path(os.environ.get("ARCBENCH_OUTPUT_DIR") or "/workspace/template")
-    for i, arg in enumerate(argv):
+    """Accept the platform invocation, bare flags like --type web, or no args at all.
+
+    Fallbacks: ARCBENCH_TASK_DIR (default ./requirements) for the source, and
+    ARCBENCH_OUTPUT_DIR / ARCBENCH_TEMPLATE_DIR (default /workspace/template)
+    for the output directory.
+    """
+    source: Path | None = None
+    out = Path(
+        os.environ.get("ARCBENCH_OUTPUT_DIR")
+        or os.environ.get("ARCBENCH_TEMPLATE_DIR")
+        or "/workspace/template"
+    )
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
         if arg == "--output-dir" and i + 1 < len(argv):
             out = Path(argv[i + 1])
+            i += 2
+        elif arg == "--type" and i + 1 < len(argv):
+            i += 2
+        elif arg.startswith("-"):
+            i += 1
+        else:
+            source = Path(arg)
+            i += 1
+    if source is None:
+        source = Path(os.environ.get("ARCBENCH_TASK_DIR") or "requirements")
     return source, out
 
 
 def main() -> int:
     source, out = parse_args(sys.argv[1:])
+    if not source.exists():
+        raise SystemExit(
+            f"requirements source not found: {source} "
+            "(pass it as the first argument or set ARCBENCH_TASK_DIR)"
+        )
     try:
         run(source, out)
         return 0
