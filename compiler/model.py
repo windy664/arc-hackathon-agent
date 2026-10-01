@@ -7,6 +7,7 @@ import json
 import os
 import re
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -20,6 +21,33 @@ from .config import (
 )
 
 MOCK_MODE = os.environ.get("ARCBENCH_MOCK_MODEL") == "1"
+
+TAIL_MESSAGES = 6  # recent turns are never condensed away
+
+COMPRESSION_MARKER_TEMPLATE = (
+    "⟪CONTEXT-COMPACTED: {omitted:,} of {total:,} chars from earlier messages "
+    "condensed here. This is NOT original content and must never be reproduced "
+    "or imitated in new output — always write full, untruncated content.⟫"
+)
+
+ELISION_MARKER_TEMPLATE = (
+    "⟪CONTEXT-ELIDED: {omitted:,} of {total:,} chars omitted here. "
+    "This is NOT part of the original content and must never be reproduced "
+    "in new output — always write full, untruncated content.⟫"
+)
+
+
+def fit_text(text: str, limit: int) -> str:
+    """Trim text to limit with a model-visible marker it cannot mistake for content."""
+    if len(text) <= limit:
+        return text
+    head = int(limit * 0.6)
+    tail = limit - head - 200
+    if tail < 0:
+        head, tail = limit - 200, 0
+    omitted = len(text) - head - tail
+    marker = ELISION_MARKER_TEMPLATE.format(omitted=omitted, total=len(text))
+    return f"{text[:head]}\n{marker}\n{text[len(text) - tail:] if tail else ''}"
 
 
 def _mock_reply(messages: list[dict]) -> str:
@@ -62,6 +90,27 @@ def _mock_reply(messages: list[dict]) -> str:
             "api": [{"method": "GET", "path": "/api/items", "summary": "list items"}],
             "pages": [{"route": "/", "name": "Home", "summary": "home"}],
         })
+    if "Python script that fixes" in text:
+        candidates = re.findall(r"`([^`]+\.tsx)`", text)
+        rel = next((c for c in candidates if "/" in c), candidates[-1] if candidates else "frontend/src/pages/Page.tsx")
+        return (
+            "```python\n"
+            "from pathlib import Path\n"
+            "import re\n"
+            f"p = Path({rel!r})\n"
+            "s = p.read_text(encoding='utf-8')\n"
+            "s = s.replace('<button>Action</button>', '<button>New blank workbook</button>')\n"
+            "p.write_text(s, encoding='utf-8')\n"
+            "```\n"
+        )
+    if "complete corrected file" in text:
+        return (
+            "```tsx\n"
+            "export default function Fixed() {\n"
+            "  return <button>New blank workbook</button>\n"
+            "}\n"
+            "```\n"
+        )
     return '{"ok": true, "missing_or_wrong": [], "controls": []}'
 
 
@@ -110,7 +159,19 @@ class ModelClient:
                     payload = json.loads(resp.read())
                 BUDGET.note(payload.get("usage") or {})
                 choice = (payload.get("choices") or [{}])[0]
-                return (choice.get("message") or {}).get("content") or ""
+                content = (choice.get("message") or {}).get("content") or ""
+                if choice.get("finish_reason") == "length":
+                    if attempt < 2:
+                        log("response truncated (finish_reason=length); retrying")
+                        continue
+                    log("response truncated (finish_reason=length); accepting partial output")
+                return content
+            except urllib.error.HTTPError as exc:
+                if exc.code in (400, 401, 402, 403):
+                    log(f"model call rejected (HTTP {exc.code}); not retrying")
+                    return ""
+                log(f"model call error (attempt {attempt + 1}, HTTP {exc.code})")
+                time.sleep(4 * (attempt + 1))
             except Exception as exc:
                 log(f"model call error (attempt {attempt + 1}): {exc}")
                 time.sleep(4 * (attempt + 1))
@@ -148,16 +209,34 @@ class Conversation:
         return reply
 
     def _compact(self) -> None:
+        """Head/tail-preserving compaction.
+
+        The system prompt and prefix message are pinned (provider prefix cache),
+        the most recent TAIL_MESSAGES turns are kept verbatim, and only as many
+        middle messages as needed are condensed — never splitting a user/assistant
+        pair — into a summary carrying a marker the model must not imitate.
+        """
         def total() -> int:
             return sum(len(str(m.get("content") or "")) for m in self.messages)
 
-        while total() > MAX_CONVERSATION_CHARS and len(self.messages) > 4:
-            old = self.messages[2]
-            summary = str(old.get("content") or "")[:MAX_EXCHANGE_SUMMARY_CHARS]
-            self.messages[2:4] = [{
+        cursor = 2
+        while total() > MAX_CONVERSATION_CHARS and len(self.messages) > 2 + TAIL_MESSAGES:
+            if cursor >= len(self.messages) - TAIL_MESSAGES:
+                break
+            chunk_len = 1
+            if (cursor + 1 < len(self.messages) - TAIL_MESSAGES
+                    and self.messages[cursor].get("role") == "user"
+                    and self.messages[cursor + 1].get("role") == "assistant"):
+                chunk_len = 2
+            chunk = self.messages[cursor:cursor + chunk_len]
+            text = " ".join(str(m.get("content") or "") for m in chunk)
+            summary = text[:MAX_EXCHANGE_SUMMARY_CHARS]
+            marker = COMPRESSION_MARKER_TEMPLATE.format(omitted=len(text), total=len(text))
+            self.messages[cursor:cursor + chunk_len] = [{
                 "role": "user",
-                "content": f"[earlier exchange condensed] {summary}",
+                "content": f"{marker}\n{summary}",
             }]
+            cursor += 1
 
 
 def extract_code(text: str) -> str:
