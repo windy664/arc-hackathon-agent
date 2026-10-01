@@ -8,3 +8,6 @@ build/
 .arc/
 node_modules/
 *.log
+ci-mini-task/
+ci-out/
+submission.zip

@@ -1,4 +1,4 @@
-name: Test ARC Agent
+name: Verify agent
 
 on:
   push:
@@ -7,32 +7,80 @@ on:
     branches: [ main ]
 
 jobs:
-  test:
+  offline:
     runs-on: ubuntu-latest
-    
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
-    
-    - name: Test agent entry point
-      run: |
-        python main.py --help || true
-    
-    - name: Validate structure
-      run: |
-        # 检查必要文件是否存在
-        test -f main.py
-        test -f arc_main.py
-        test -f requirements.txt
-        test -d agents
-        test -d core
-        test -d arc-template
-        echo "结构验证通过"
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: pip install pyyaml pytest
+
+      - name: Byte-compile all sources
+        run: python -m compileall -q main.py compiler tests
+
+      - name: Unit and mock end-to-end tests
+        run: pytest -q
+
+  scaffold-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install python dependencies
+        run: pip install pyyaml
+
+      - name: Assemble app with the mock model
+        env:
+          ARCBENCH_MOCK_MODEL: '1'
+          ARCBENCH_MAX_SECONDS: '25'
+          ARCBENCH_MAX_MODEL_REQUESTS: '20'
+        run: python -m tests.ci_fixture && python main.py ci-mini-task --output-dir ci-out
+
+      - name: Backend syntax and platform contract
+        run: |
+          node --check ci-out/backend/src/index.js
+          grep -q 'process.env.PORT' ci-out/backend/src/index.js
+          grep -q 'frontend/dist' ci-out/backend/src/index.js
+          test -f ci-out/frontend/package.json
+          test -f ci-out/frontend/src/App.tsx
+
+      - name: Frontend scaffold must build
+        working-directory: ci-out/frontend
+        run: |
+          npm install --no-audit --no-fund --loglevel=error
+          npm run build
+          test -d dist
+
+      - name: Package shape matches the platform entrypoint contract
+        run: |
+          python - <<'PY'
+          import zipfile, subprocess, sys
+          subprocess.run([sys.executable, '-c', 'pass'], check=True)
+          from pathlib import Path
+          excluded = {'node_modules', '.git', 'dist', '__pycache__', '.venv', '.pytest_cache'}
+          with zipfile.ZipFile('submission.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+              for p in Path('.').rglob('*'):
+                  if not p.is_file():
+                      continue
+                  rel = p.relative_to('.')
+                  if excluded.intersection(rel.parts):
+                      continue
+                  z.write(p, rel.as_posix())
+          names = zipfile.ZipFile('submission.zip').namelist()
+          assert 'main.py' in names, 'platform entrypoint main.py missing'
+          assert 'requirements.txt' in names, 'requirements.txt missing'
+          assert 'compiler/pipeline.py' in names
+          print('package ok:', len(names), 'files')
+          PY
