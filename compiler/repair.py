@@ -10,6 +10,7 @@ from pathlib import Path
 from .config import UI_EXTS
 from .generate import SYSTEM_PROMPT, digest_requirements
 from .model import Conversation, ModelClient, extract_code, fit_text
+from .sandbox import check_patch_script
 
 
 def map_problem_to_area(problem: str, areas: list[dict], comp_of_area: dict[str, str]) -> str | None:
@@ -81,6 +82,14 @@ def _looks_like_patch_script(code: str) -> bool:
 
 
 def _run_patch_script(out: Path, script: str, relpath: Path) -> bool:
+    """Guarded execution: policy check, backup, run, validate, rollback on failure."""
+    policy_error = check_patch_script(script, relpath.name)
+    if policy_error:
+        return False
+    target = out / relpath
+    if not target.is_file():
+        return False
+    backup = target.read_text(encoding="utf-8", errors="ignore")
     try:
         proc = subprocess.run(
             [sys.executable, "-c", script],
@@ -93,11 +102,11 @@ def _run_patch_script(out: Path, script: str, relpath: Path) -> bool:
         return False
     if proc.returncode != 0:
         return False
-    target = out / relpath
-    if not target.is_file():
-        return False
     content = target.read_text(encoding="utf-8", errors="ignore")
-    return "function" in content or "=>" in content
+    if "function" not in content and "=>" not in content:
+        target.write_text(backup, encoding="utf-8")
+        return False
+    return content != backup
 
 
 def repair_area(client: ModelClient, out: Path, comp: str, area: dict,
