@@ -8,10 +8,13 @@ import socket
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .config import log
 from .model import ModelClient, extract_json
+
+PARALLEL_WORKERS = max(1, int(os.environ.get("ARCBENCH_PARALLEL_WORKERS", "4")))
 
 VISUAL_REVIEW_PROMPT = """You are reviewing a generated web page against its design reference.
 
@@ -186,3 +189,17 @@ def visual_review(client: ModelClient, reference: Path, screenshot: Path,
     verdict.setdefault("missing_or_wrong", [])
     verdict.setdefault("controls", [])
     return verdict
+
+
+def parallel_visual_reviews(client: ModelClient,
+                            items: list[tuple[dict, Path, Path]]) -> list[dict]:
+    """Review (area, reference, screenshot) triples concurrently.
+
+    Results stay aligned with the input order; each review is independent.
+    """
+    def work(item: tuple[dict, Path, Path]) -> dict:
+        area, reference, screenshot = item
+        return visual_review(client, reference, screenshot, area)
+
+    with ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as pool:
+        return list(pool.map(work, items))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 
 MAX_REQUESTS = int(os.environ.get("ARCBENCH_MAX_MODEL_REQUESTS", "28"))
@@ -23,26 +24,31 @@ class Budget:
         self.start = time.time()
         self.requests = 0
         self.tokens = 0
+        self._lock = threading.Lock()
 
     def allow(self) -> bool:
-        if self.requests >= MAX_REQUESTS:
-            return False
-        if self.tokens >= MAX_TOTAL_TOKENS:
-            return False
+        with self._lock:
+            if self.requests >= MAX_REQUESTS:
+                return False
+            if self.tokens >= MAX_TOTAL_TOKENS:
+                return False
         return (time.time() - self.start) < MAX_SECONDS
 
     def time_left(self) -> float:
         return MAX_SECONDS - (time.time() - self.start)
 
     def note(self, usage: dict) -> None:
-        self.requests += 1
-        if isinstance(usage, dict):
-            self.tokens += int(usage.get("total_tokens") or 0)
+        with self._lock:
+            self.requests += 1
+            if isinstance(usage, dict):
+                self.tokens += int(usage.get("total_tokens") or 0)
 
     def status(self) -> str:
+        with self._lock:
+            requests, tokens = self.requests, self.tokens
         return (
-            f"requests={self.requests}/{MAX_REQUESTS} "
-            f"tokens={self.tokens}/{MAX_TOTAL_TOKENS} "
+            f"requests={requests}/{MAX_REQUESTS} "
+            f"tokens={tokens}/{MAX_TOTAL_TOKENS} "
             f"elapsed={int(time.time() - self.start)}s"
         )
 

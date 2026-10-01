@@ -9,7 +9,7 @@ from .config import BUDGET, MAX_REPAIR_AREAS, log
 from .generate import (
     generate_backend,
     generate_design,
-    generate_page,
+    parallel_generate_pages,
     plan_ui_areas,
 )
 from .model import ModelClient
@@ -24,9 +24,9 @@ from .requirements import (
 from .visual import (
     free_port,
     npm_install_and_build,
+    parallel_visual_reviews,
     screenshot_pages,
     start_server,
-    visual_review,
     wait_for_server,
 )
 
@@ -77,10 +77,7 @@ def run(source: Path, out: Path) -> None:
 
     pages: list[tuple[str, str]] = []
     comp_of_area: dict[str, str] = {}
-    for area in areas:
-        if not BUDGET.allow():
-            break
-        comp, code = generate_page(client, area, contract)
+    for area, comp, code in parallel_generate_pages(client, areas, contract):
         if code and ("export" in code or "function" in code):
             pages.append((comp, code))
             comp_of_area[area["key"]] = comp
@@ -123,15 +120,17 @@ def run(source: Path, out: Path) -> None:
                 shots = screenshot_pages(out, metas, port, out / "artifacts" / "screenshots")
             else:
                 log("server did not become ready; skipping screenshots")
+        review_items = []
         for area in areas:
             comp = comp_of_area.get(area["key"])
-            if not comp or not area.get("images"):
-                continue
-            if comp not in shots:
+            if not comp or not area.get("images") or comp not in shots:
                 continue
             if not BUDGET.allow() or BUDGET.time_left() < 120:
                 break
-            verdict = visual_review(client, area["images"][0], shots[comp], area)
+            review_items.append((area, area["images"][0], shots[comp], comp))
+        for (area, _ref, _shot, comp), verdict in zip(
+            review_items, parallel_visual_reviews(client, [i[:3] for i in review_items])
+        ):
             status = "OK" if verdict.get("ok") else f"{len(verdict.get('missing_or_wrong', []))} diffs"
             log(f"visual review {comp}: {status} {BUDGET.status()}")
             if not verdict.get("ok"):
