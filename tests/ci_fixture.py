@@ -2,14 +2,11 @@
 
 from pathlib import Path
 
-from tests.conftest import MINI_REQUIREMENTS, TINY_PNG
+from tests.fixture_data import write_fixture
 
 
 def main() -> None:
-    root = Path("ci-mini-task")
-    (root / "reference").mkdir(parents=True, exist_ok=True)
-    (root / "requirements.yaml").write_text(MINI_REQUIREMENTS, encoding="utf-8")
-    (root / "reference" / "home.png").write_bytes(TINY_PNG)
+    root = write_fixture(Path("ci-mini-task"))
     print(f"fixture written to {root.resolve()}")
 
 
