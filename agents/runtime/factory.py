@@ -118,7 +118,12 @@ def build_stage_agent(
         name=name,
         model=resolved_model,
         backend=backend,
-        system_prompt=system_prompt,
+        system_prompt=(
+            system_prompt
+            + f"\n\nWorkspace mapping: file-tool `/workspace/` maps directly to `{root}/` on disk. "
+            "The system runs builds and tests against that same directory; there is no separate copy or sync step. "
+            "Convert host paths in test output back to `/workspace/` for file tools.\n"
+        ),
         middleware=[
             StageDisciplineMiddleware(stage=stage),
             DisableToolsMiddleware(disabled=DISABLED_BUILTIN_TOOLS),

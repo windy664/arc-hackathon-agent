@@ -7,6 +7,8 @@ from typing import Any, Literal, NotRequired, TypedDict
 from langchain.agents.middleware.types import AgentMiddleware, ToolCallRequest
 from langchain_core.messages import ToolMessage
 
+from app_type_handler.test_results import parse_test_results
+
 _FILE_WRITE_TOOLS = frozenset({"edit_file", "write_file"})
 _VALIDATION_TOOLS = frozenset({"run_build", "run_tests"})
 _MAX_DESIGN_WRITES = 8
@@ -198,7 +200,11 @@ def _tool_result_failed(result: ToolMessage | Any) -> bool:
     if isinstance(result, ToolMessage) and result.status == "error":
         return True
     content = str(getattr(result, "content", "") or "")
-    return "Exit Code: 0" not in content and ("Exit Code:" in content or content.lstrip().startswith("Error:"))
+    if content.lstrip().startswith("Error:"):
+        return True
+    # The runner puts the aggregate exit code before individual build/test
+    # sections. A successful sub-step must not hide a failed batch.
+    return "Exit Code:" in content and parse_test_results(content)["exit_code"] != 0
 
 
 def _is_test_asset(path: str) -> bool:

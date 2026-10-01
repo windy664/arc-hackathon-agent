@@ -120,6 +120,7 @@ def workspace_tool_policy() -> str:
             "Use dedicated file tools for file work: `glob` for file discovery, `grep` for content search, `read_file` for reading, `edit_file` for modifying existing files, and `write_file` only for new files.",
             "The generic `execute` and `delete` tools are disabled. Use only the system-provided `run_tests` or `run_build` validation tools when the current stage exposes them.",
             "Start exploration with exact paths from the requirement, interface contract, test manifest, traceability records, or failure output.",
+            "Resolve relative imports from the importing file's directory, not the runner's working directory. For example, `backend/tests/services/auth.test.js` imports `../../src/database/test_harness`, not `../src/database/test_harness`. On MODULE_NOT_FOUND, check that path before changing exports or blaming workspace synchronization.",
             "Avoid broad `grep`, broad `glob`, and directory inventory from `/workspace`; use at most one narrow discovery step before switching to exact path reads.",
             "The `glob` tool uses simple glob patterns; do not rely on brace expansion such as `**/*.{ts,tsx}`.",
             "For source files that may be large, always call `read_file` with explicit `offset` and `limit` (at most 200 lines). Continue with a non-overlapping range only when the next hypothesis requires it; do not reread an already consumed range without a failure.",

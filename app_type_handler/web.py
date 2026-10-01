@@ -826,7 +826,11 @@ class WebAppType(AppTypeHandler):
             cwd=os.path.join(self.workspace_path, "backend"),
             timeout=120.0,
         )
-        return f"=== Frontend Build Result ===\n{frontend_result}\n\n=== Backend Build Result ===\n{backend_result}"
+        exit_code = 0 if all(_extract_exit_code(result) == 0 for result in (frontend_result, backend_result)) else 1
+        return (
+            f"Exit Code: {exit_code}\n\n"
+            f"=== Frontend Build Result ===\n{frontend_result}\n\n=== Backend Build Result ===\n{backend_result}"
+        )
 
     async def run_test_file(self, test_type: str, file_path: str) -> str:
         await self._log("System", f"System test execution ({test_type}): {file_path}")
@@ -857,7 +861,7 @@ class WebAppType(AppTypeHandler):
             if not build_ok:
                 return _prepend_test_execution_header(
                     execution,
-                    "Frontend build failed before E2E startup.\n\n"
+                    "Exit Code: 1\nFrontend build failed before E2E startup.\n\n"
                     f"=== Frontend Build ===\n{frontend_build_output}",
                 )
 
@@ -868,7 +872,7 @@ class WebAppType(AppTypeHandler):
             if not database_ready:
                 return _prepend_test_execution_header(
                     execution,
-                    "E2E database preparation failed before backend startup.\n\n"
+                    "Exit Code: 1\nE2E database preparation failed before backend startup.\n\n"
                     f"=== Frontend Build ===\n{frontend_build_output}\n\n"
                     f"=== E2E Runtime Env ===\nDB Path: {e2e_runtime_env.get('ARC_E2E_DB_PATH', 'unknown')}\n\n"
                     f"=== Database Prepare ===\n{database_prepare_output}",
@@ -883,7 +887,7 @@ class WebAppType(AppTypeHandler):
             if backend_process is None:
                 return _prepend_test_execution_header(
                     execution,
-                    "Failed to start backend server for E2E testing.\n\n"
+                    "Exit Code: 1\nFailed to start backend server for E2E testing.\n\n"
                     f"=== Frontend Build ===\n{frontend_build_output}\n\n"
                     f"=== Database Prepare ===\n{database_prepare_output}\n\n"
                     f"=== E2E Runtime Env ===\nDB Path: {e2e_runtime_env.get('ARC_E2E_DB_PATH', 'unknown')}\n\n"
@@ -898,7 +902,11 @@ class WebAppType(AppTypeHandler):
                 extra_env=e2e_runtime_env if normalized_type == "e2e" else None,
             )
             if normalized_type == "e2e":
+                exit_code = _extract_exit_code(result_body)
+                if exit_code is None:
+                    exit_code = 1
                 result_body = (
+                    f"Exit Code: {exit_code}\n\n"
                     f"=== Frontend Build ===\n{frontend_build_output}\n\n"
                     f"=== E2E Runtime Env ===\nDB Path: {e2e_runtime_env.get('ARC_E2E_DB_PATH', 'unknown')}\n"
                     f"DB Label: {e2e_runtime_env.get('ARC_E2E_DB_LABEL', 'unknown')}\n\n"
@@ -907,7 +915,7 @@ class WebAppType(AppTypeHandler):
                     f"Port: {get_web_port()}\n"
                     f"Startup Cleanup: {backend_startup_detail or 'No startup cleanup note recorded.'}\n\n"
                     f"=== Backend Instance Fingerprint ===\n{backend_instance_fingerprint or 'No backend instance fingerprint recorded.'}\n\n"
-                    f"{result_body}"
+                    f"=== Playwright E2E Batch ===\n{result_body}"
                 )
         finally:
             if normalized_type == "e2e":
@@ -921,7 +929,7 @@ class WebAppType(AppTypeHandler):
                 f"{result_body}\n\n"
                 f"=== Backend Runtime Cleanup ===\n{backend_cleanup_note or 'No cleanup note recorded.'}"
             )
-            if "Backend runtime cleanup failed:" in backend_cleanup_note and "Exit Code: 0" in result_body:
+            if "Backend runtime cleanup failed:" in backend_cleanup_note and _extract_exit_code(result_body) == 0:
                 result_body = result_body.replace("Exit Code: 0", "Exit Code: 1", 1)
 
         return _prepend_test_execution_header(execution, result_body)
@@ -992,7 +1000,7 @@ class WebAppType(AppTypeHandler):
         if not build_ok:
             return _prepend_group_execution_header(
                 execution,
-                "Frontend build failed before E2E startup.\n\n"
+                "Exit Code: 1\nFrontend build failed before E2E startup.\n\n"
                 f"=== Frontend Build ===\n{frontend_build_output}",
             )
 
@@ -1007,7 +1015,7 @@ class WebAppType(AppTypeHandler):
         if not database_ready:
             return _prepend_group_execution_header(
                 execution,
-                "E2E database preparation failed before backend startup.\n\n"
+                "Exit Code: 1\nE2E database preparation failed before backend startup.\n\n"
                 f"=== Frontend Build ===\n{frontend_build_output}\n\n"
                 f"=== E2E Runtime Env ===\nDB Path: {e2e_runtime_env.get('ARC_E2E_DB_PATH', 'unknown')}\n\n"
                 f"=== Database Prepare ===\n{database_prepare_output}",
@@ -1059,10 +1067,10 @@ class WebAppType(AppTypeHandler):
                 f"Port: {get_web_port()}\n\n"
                 f"Startup Cleanup: {backend_startup_detail or 'No startup cleanup note recorded.'}\n\n"
                 f"=== Backend Instance Fingerprint ===\n{backend_instance_fingerprint or 'No backend instance fingerprint recorded.'}\n\n"
-                f"{playwright_result}"
+                f"=== Playwright E2E Batch ===\n{playwright_result}"
             )
         except Exception as exc:
-            return f"Failed to start grouped E2E execution: {str(exc)}"
+            return f"Exit Code: 1\nFailed to start grouped E2E execution: {str(exc)}"
         finally:
             try:
                 backend_cleanup_note = await _terminate_process(backend_process, port=get_web_port())
@@ -1073,7 +1081,7 @@ class WebAppType(AppTypeHandler):
             f"{body}\n\n"
             f"=== Backend Runtime Cleanup ===\n{backend_cleanup_note or 'No cleanup note recorded.'}"
         )
-        if "Backend runtime cleanup failed:" in backend_cleanup_note and "Exit Code: 0" in body:
+        if "Backend runtime cleanup failed:" in backend_cleanup_note and _extract_exit_code(body) == 0:
             body = body.replace("Exit Code: 0", "Exit Code: 1", 1)
         return _prepend_group_execution_header(execution, body)
 
