@@ -7,7 +7,18 @@ from compiler.requirements import (
     derive_contract,
     find_reference_images,
     load_requirements,
+    plan_design_groups,
 )
+
+
+def test_design_groups_follow_tree_parents(mini_task: Path) -> None:
+    data, req_dir = load_requirements(mini_task)
+    atomics: list[dict] = []
+    collect_atomics(data, [], atomics)
+    groups = plan_design_groups(atomics)
+    assert [g["node_id"] for g in groups] == ["REQ-1"]
+    assert [a["id"] for a in groups[0]["atomics"]] == ["REQ-1-1"]
+    assert atomics[0]["parent"] == "REQ-1"
 
 
 def test_load_and_collect(mini_task: Path) -> None:

@@ -9,7 +9,9 @@ import time
 # Defaults follow the leaderboard's normal mid-table band (aggregate view):
 # teams at 36-66% pass spend ~11-20 CNY per run (~10-20M tokens on flash).
 # The burn zone is an order of magnitude above: one 116M-token run -> 478 CNY -> 402.
-MAX_REQUESTS = int(os.environ.get("ARCBENCH_MAX_MODEL_REQUESTS", "36"))
+# Requests cover the tree-driven walk: per-folder design + backend + pages +
+# reviews + one bounded repair round.
+MAX_REQUESTS = int(os.environ.get("ARCBENCH_MAX_MODEL_REQUESTS", "48"))
 MAX_TOTAL_TOKENS = int(os.environ.get("ARCBENCH_MAX_TOTAL_TOKENS", "20000000"))
 MAX_SECONDS = int(os.environ.get("ARCBENCH_MAX_SECONDS", "5400"))
 MAX_OUTPUT_TOKENS = 12000

@@ -74,6 +74,9 @@ class Reporter:
                     seen.add(nid)
                     self._events(event, nid, message)
 
+    def design_started(self, req_ids: list[str], message: str) -> None:
+        self._for_all(req_ids, "mark_design_started", message)
+
     def design_done(self, req_ids: list[str], message: str) -> None:
         self._for_all(req_ids, "mark_design_done", message)
 

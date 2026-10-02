@@ -20,18 +20,39 @@ def load_requirements(source: Path) -> tuple[dict, Path]:
     return yaml.safe_load(text), yaml_path.parent
 
 
-def collect_atomics(node: dict, trail: list[str], out: list[dict]) -> None:
+def collect_atomics(node: dict, trail: list[str], out: list[dict],
+                    parent_id: str | None = None) -> None:
     name = node.get("name") or node.get("id") or ""
+    node_id = node.get("id") or "ROOT"
     if node.get("type") == "ATOMIC":
         out.append({
             "id": node.get("id"),
             "name": name,
+            "parent": parent_id or "ROOT",
             "trail": " / ".join(trail),
             "description": node.get("description") or "",
             "scenarios": node.get("scenarios") or [],
         })
     for child in node.get("children") or []:
-        collect_atomics(child, trail + [name], out)
+        collect_atomics(child, trail + [name], out, parent_id=node_id)
+
+
+def plan_design_groups(atomics: list[dict]) -> list[dict]:
+    """Group atomics by their parent folder in tree order.
+
+    Each group is one design unit: design it (with full fidelity for its
+    scope), implement its areas, then move down the tree — matching the
+    requirement tree's per-node design -> implement -> test lifecycle.
+    """
+    groups: dict[str, dict] = {}
+    order: list[str] = []
+    for a in atomics:
+        pid = a.get("parent") or "ROOT"
+        if pid not in groups:
+            groups[pid] = {"node_id": pid, "atomics": []}
+            order.append(pid)
+        groups[pid]["atomics"].append(a)
+    return [groups[k] for k in order]
 
 
 def find_reference_images(atomics: list[dict], req_dir: Path) -> dict[str, Path]:
