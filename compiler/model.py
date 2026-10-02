@@ -151,6 +151,8 @@ class ModelClient:
             "max_tokens": MAX_OUTPUT_TOKENS,
             "temperature": 0.2,
         }).encode()
+        prompt_chars = sum(len(str(m.get("content") or "")) for m in sent)
+        t0 = time.time()
         req = urllib.request.Request(
             f"{base}/chat/completions",
             data=body,
@@ -167,6 +169,14 @@ class ModelClient:
                 BUDGET.note(payload.get("usage") or {})
                 choice = (payload.get("choices") or [{}])[0]
                 content = (choice.get("message") or {}).get("content") or ""
+                latency = time.time() - t0
+                usage = payload.get("usage") or {}
+                log(
+                    f"telemetry call={'vision' if use_vision else 'text'}"
+                    f" latency={latency:.0f}s prompt={prompt_chars}ch"
+                    f" reply={len(content)}ch finish={choice.get('finish_reason')}"
+                    f" tokens={usage.get('total_tokens')}"
+                )
                 if choice.get("finish_reason") == "length":
                     if attempt < MAX_ATTEMPTS - 1:
                         log("response truncated (finish_reason=length); retrying")
@@ -174,12 +184,14 @@ class ModelClient:
                     log("response truncated (finish_reason=length); accepting partial output")
                 return content
             except urllib.error.HTTPError as exc:
+                log(f"telemetry call=failed latency={time.time() - t0:.0f}s http={exc.code}")
                 if exc.code in (400, 401, 402, 403):
                     log(f"model call rejected (HTTP {exc.code}); not retrying")
                     return ""
                 log(f"model call error (attempt {attempt + 1}, HTTP {exc.code})")
                 time.sleep(4 * (attempt + 1))
             except Exception as exc:
+                log(f"telemetry call=failed latency={time.time() - t0:.0f}s err={type(exc).__name__}")
                 log(f"model call error (attempt {attempt + 1}): {exc}")
                 time.sleep(4 * (attempt + 1))
         return ""
