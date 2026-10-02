@@ -23,7 +23,7 @@ from .integration import (
 from .model import Conversation, ModelClient, extract_code, extract_json
 from .visual import VISUAL_REVIEW_PROMPT
 
-TEAM_SIZE = max(1, int(os.environ.get("ARCBENCH_AGENTS", "3")))
+TEAM_SIZE = max(1, int(os.environ.get("ARCBENCH_AGENTS", "4")))
 
 
 class EngineerAgent:

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .config import (
     BUDGET,
+    MAX_ATTEMPTS,
     MAX_CONVERSATION_CHARS,
     MAX_EXCHANGE_SUMMARY_CHARS,
     MAX_OUTPUT_TOKENS,
@@ -159,7 +160,7 @@ class ModelClient:
             },
             method="POST",
         )
-        for attempt in range(3):
+        for attempt in range(MAX_ATTEMPTS):
             try:
                 with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
                     payload = json.loads(resp.read())
@@ -167,7 +168,7 @@ class ModelClient:
                 choice = (payload.get("choices") or [{}])[0]
                 content = (choice.get("message") or {}).get("content") or ""
                 if choice.get("finish_reason") == "length":
-                    if attempt < 2:
+                    if attempt < MAX_ATTEMPTS - 1:
                         log("response truncated (finish_reason=length); retrying")
                         continue
                     log("response truncated (finish_reason=length); accepting partial output")

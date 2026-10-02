@@ -105,6 +105,8 @@ Rules:
 - Every interactive control must be reachable by its accessible name (button/link/textbox names).
 - Use inline styles or className strings; no external UI library.
 - TypeScript, imports only from 'react'.
+- Keep the component under 400 lines: prefer compact inline styles, avoid
+  duplicating shared helpers, do not include comments or tests.
 - The reference screenshot shows the target layout — match its structure, labels and flows.
 
 Area: {area}

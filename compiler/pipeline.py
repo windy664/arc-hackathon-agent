@@ -105,23 +105,6 @@ def run(source: Path, out: Path) -> None:
         reporter.design_done(g_ids, f"{group['node_id']} design complete")
         log(f"designed {group['node_id']}: +{len(d.get('api') or [])} api {BUDGET.status()}")
 
-        # backend for this node's additions — kept only if old endpoints survive
-        prev_api = [dict(e) for e in integration.get("api") or []]
-        index = out / "backend" / "src" / "index.js"
-        existing_src = index.read_text(encoding="utf-8", errors="ignore") if index.is_file() else None
-        backend_code = generate_backend(client, cum_design, group["atomics"],
-                                        existing_src=existing_src)
-        if backend_code and "express" in backend_code and (
-            not existing_src or backend_covers(prev_api, backend_code)
-        ):
-            write_backend(out, backend_code)
-            log(f"backend updated for {group['node_id']} ({len(backend_code)} chars)")
-        elif existing_src:
-            log(f"backend regen rejected for {group['node_id']}; keeping current backend")
-        else:
-            write_backend(out, fallback_backend())
-            log("backend fallback used")
-
         areas = plan_ui_areas(group["atomics"], images)
         for area in areas:
             if area["key"] != "core" and area["key"] in images:
@@ -158,6 +141,24 @@ def run(source: Path, out: Path) -> None:
         pages.append(("HomePage", fallback_home(contract)))
         if areas:
             comp_of_area[areas[0]["key"]] = "HomePage"
+
+    # the backend is one shared artifact — generate it once from the
+    # cumulative tree design instead of per node (each per-node regen used to
+    # burn a full timeout cycle on the slow gateway)
+    index = out / "backend" / "src" / "index.js"
+    existing_src = index.read_text(encoding="utf-8", errors="ignore") if index.is_file() else None
+    prev_api = [dict(e) for e in integration.get("api") or []]
+    backend_code = generate_backend(client, cum_design, atomics, existing_src=existing_src)
+    if backend_code and "express" in backend_code and (
+        not existing_src or backend_covers(prev_api, backend_code)
+    ):
+        write_backend(out, backend_code)
+        log(f"backend written ({len(backend_code)} chars)")
+    elif existing_src:
+        log("backend regen rejected; keeping existing backend")
+    else:
+        write_backend(out, fallback_backend())
+        log("backend fallback used")
 
     metas = write_frontend(
         out, pages, integration,
