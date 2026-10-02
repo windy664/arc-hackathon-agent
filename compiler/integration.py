@@ -45,6 +45,7 @@ def build_integration(design: dict, areas: list[dict]) -> dict:
         "api": design.get("api") or [],
         "seed": design.get("seed") or {},
         "routes": routes,
+        "data_ownership": design.get("data_ownership") or [],
     }
 
 
@@ -59,11 +60,22 @@ def digest_integration(integration: dict) -> str:
         for r in integration.get("routes", [])
     )
     seed = json.dumps(integration.get("seed", {}), ensure_ascii=False)
+    ownership_lines = "\n".join(
+        f"- {o.get('entity', '?')}.{', '.join(o.get('fields', []) or ['*'])}"
+        f" -> written by {', '.join(o.get('writes') or o.get('req_ids') or ['?'])}"
+        for o in integration.get("data_ownership", [])
+        if isinstance(o, dict)
+    ) or "- (none declared)"
     return (
         "TEAM INTEGRATION CONTRACT (all engineers must obey):\n"
         f"API surface (fetch these exact endpoints):\n{api_lines}\n"
         f"Route table (link to these exact routes):\n{route_lines}\n"
         f"Seed data (the app is pre-populated with exactly this):\n{seed}\n"
+        "Field ownership (write zones are separated at field level):\n"
+        f"{ownership_lines}\n"
+        "Write-separation rule: your area may only create/update fields it owns "
+        "(marked written by your requirement ids); fields owned by other areas "
+        "are read-only for you — read them through the API, never mutate them.\n"
         "Cross-area rules: after create/edit flows the user may navigate back to "
         "other routes above; state must persist via the API, and every visible "
         "entry point named in the requirements must exist on its route."

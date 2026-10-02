@@ -89,6 +89,9 @@ def _mock_reply(messages: list[dict]) -> str:
             "seed": {"items": [{"id": 1, "name": "demo"}]},
             "api": [{"method": "GET", "path": "/api/items", "summary": "list items"}],
             "pages": [{"route": "/", "name": "Home", "summary": "home"}],
+            "data_ownership": [
+                {"entity": "items", "fields": ["name"], "req_ids": ["REQ-0"], "writes": ["REQ-0"]}
+            ],
         })
     if "Python script that fixes" in text:
         candidates = re.findall(r"`([^`]+\.tsx)`", text)

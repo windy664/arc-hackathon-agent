@@ -60,8 +60,13 @@ Return ONLY a JSON object with exactly this shape (example keys):
 {
   "seed": {"<entity>": [{"<field>": <value>}]},
   "api": [{"method": "GET", "path": "/api/...", "summary": "..."}],
-  "pages": [{"route": "/...", "name": "...", "summary": "..."}]
+  "pages": [{"route": "/...", "name": "...", "summary": "..."}],
+  "data_ownership": [{"entity": "<entity>", "fields": ["<field>"], "req_ids": ["REQ-x"], "writes": ["REQ-x"]}]
 }
+
+In data_ownership, assign every entity field to the requirement ids that create
+or update it (writes) so that parallel implementers never touch another area's
+fields. Other areas may read those fields through the API.
 
 Requirements digest:
 {reqs}

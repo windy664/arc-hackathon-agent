@@ -34,13 +34,19 @@ def test_integration_digest_contains_api_routes_seed() -> None:
         "api": [{"method": "GET", "path": "/api/items", "summary": "list"}],
         "seed": {"workbooks": [{"name": "Q3 Sales"}]},
         "pages": [],
+        "data_ownership": [
+            {"entity": "workbooks", "fields": ["name"], "req_ids": ["REQ-0"], "writes": ["REQ-0"]}
+        ],
     }
     integration = build_integration(design, _areas(2))
     text = digest_integration(integration)
     assert "/api/items" in text
     assert "Q3 Sales" in text
     assert "TEAM INTEGRATION CONTRACT" in text
-    assert "Page0" in text or "/" in text
+    assert "Field ownership" in text
+    assert "workbooks.name" in text
+    assert "written by REQ-0" in text
+    assert "read-only for you" in text
 
 
 def test_area_scenario_digest_carries_seed_values() -> None:
