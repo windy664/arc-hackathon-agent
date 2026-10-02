@@ -10,32 +10,32 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from concurrent.futures import ThreadPoolExecutor
 
 from .config import BUDGET
 from .generate import FRONTEND_PAGE_PROMPT, SYSTEM_PROMPT, digest_requirements
+from .integration import (
+    area_scenario_digest,
+    comp_name_for,
+    digest_integration,
+)
 from .model import Conversation, ModelClient, extract_code, extract_json
 from .visual import VISUAL_REVIEW_PROMPT
 
 TEAM_SIZE = max(1, int(os.environ.get("ARCBENCH_AGENTS", "3")))
 
 
-def comp_name_for(area: dict) -> str:
-    name = (area["reqs"][0]["name"] or "Page") if area.get("reqs") else "Page"
-    comp = re.sub(r"[^A-Za-z0-9]", "", name.title())[:24]
-    return comp or "Page"
-
-
 class EngineerAgent:
-    def __init__(self, client: ModelClient, contract: dict, index: int) -> None:
+    def __init__(self, client: ModelClient, contract: dict, index: int,
+                 integration: dict | None = None) -> None:
         self.index = index
         self.built = 0
         prefix = (
             f"You are engineer #{index + 1} on a small team generating a web "
             "application from structured requirements. The shared accessibility "
             "contract you must obey:\n"
-            f"{json.dumps(contract, ensure_ascii=False)[:4000]}\n"
+            f"{json.dumps(contract, ensure_ascii=False)[:4000]}\n\n"
+            f"{digest_integration(integration or {})}\n\n"
             "You will receive one UI area at a time. For each area return the "
             "complete component in a single fenced code block."
         )
@@ -49,14 +49,23 @@ class EngineerAgent:
             reqs=digest_requirements(area.get("reqs", []), 12000),
             contract="already in your context; obey it",
         )
+        scenarios = area_scenario_digest(area)
+        if scenarios:
+            prompt += (
+                "\n\nScenario flows this area must support (tests follow these "
+                f"exact paths and texts):\n{scenarios}"
+            )
         code = extract_code(self.conv.ask(prompt, images=area.get("images") or None))
         self.built += 1
         return area, comp, code
 
 
 class EngineerTeam:
-    def __init__(self, client: ModelClient, contract: dict, size: int = TEAM_SIZE) -> None:
-        self.agents = [EngineerAgent(client, contract, i) for i in range(size)]
+    def __init__(self, client: ModelClient, contract: dict, size: int = TEAM_SIZE,
+                 integration: dict | None = None) -> None:
+        self.agents = [
+            EngineerAgent(client, contract, i, integration) for i in range(size)
+        ]
 
     def build_all(self, areas: list[dict]) -> list[tuple[dict, str, str]]:
         """Chunk areas among agents; agents run side by side, queues stay serial."""

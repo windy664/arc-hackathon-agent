@@ -12,6 +12,7 @@ from .generate import (
     generate_design,
     plan_ui_areas,
 )
+from .integration import build_integration
 from .model import ModelClient
 from .repair import repair_area, verify_sources
 from .report import Reporter
@@ -74,9 +75,12 @@ def run(source: Path, out: Path) -> None:
     if len(areas) > 10:
         areas = areas[:10]
 
+    integration = build_integration(design, areas)
+    log(f"integration: {len(integration['api'])} api routes, {len(integration['routes'])} pages")
+
     pages: list[tuple[str, str]] = []
     comp_of_area: dict[str, str] = {}
-    team = EngineerTeam(client, contract)
+    team = EngineerTeam(client, contract, integration=integration)
     for area, comp, code in team.build_all(areas):
         if code and ("export" in code or "function" in code):
             pages.append((comp, code))
@@ -94,7 +98,7 @@ def run(source: Path, out: Path) -> None:
         pages.append(("HomePage", fallback_home(contract)))
         comp_of_area[areas[0]["key"]] = "HomePage"
 
-    metas = write_frontend(out, pages, design)
+    metas = write_frontend(out, pages, integration)
     log("frontend written")
 
     problems = verify_sources(out, contract, areas, comp_of_area)

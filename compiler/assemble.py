@@ -21,7 +21,8 @@ def write_backend(out: Path, code: str) -> None:
     (out / "backend" / "src" / "index.js").write_text(code, encoding="utf-8")
 
 
-def write_frontend(out: Path, pages: list[tuple[str, str]], design: dict) -> list[dict]:
+def write_frontend(out: Path, pages: list[tuple[str, str]],
+                   integration: dict) -> list[dict]:
     src = out / "frontend" / "src"
     pages_dir = src / "pages"
     pages_dir.mkdir(parents=True, exist_ok=True)
@@ -78,21 +79,16 @@ def write_frontend(out: Path, pages: list[tuple[str, str]], design: dict) -> lis
         "a { color: inherit; }\n"
     )
 
-    route_by_name = {}
-    for r in design.get("pages") or []:
-        if isinstance(r, dict):
-            route_by_name[str(r.get("name") or "").lower()] = r.get("route") or "/"
+    route_by_comp = {
+        r.get("comp"): r.get("route") or "/"
+        for r in (integration.get("routes") or [])
+        if isinstance(r, dict)
+    }
 
     metas = []
-    for i, (comp, code) in enumerate(pages):
+    for comp, code in pages:
         (pages_dir / f"{comp}.tsx").write_text(code, encoding="utf-8")
-        route = "/"
-        for name, r in route_by_name.items():
-            if name and (name in comp.lower() or comp.lower() in name):
-                route = r
-        if i == 0:
-            route = "/"
-        metas.append({"comp": comp, "route": route})
+        metas.append({"comp": comp, "route": route_by_comp.get(comp, "/")})
 
     lines = []
     for comp, _ in pages:
