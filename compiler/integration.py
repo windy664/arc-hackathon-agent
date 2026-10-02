@@ -23,12 +23,14 @@ def kebab(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", s).strip("-") or "page"
 
 
-def route_table(areas: list[dict]) -> list[dict]:
-    """Deterministic routes: the first area owns '/', the rest get /<kebab-comp>."""
+def route_table(areas: list[dict], root_taken: bool = False) -> list[dict]:
+    """Deterministic routes. The first area owns '/' unless an earlier-stage
+    page already owns it (extend mode), in which case everything gets slugs.
+    """
     table = []
     for i, area in enumerate(areas):
         comp = comp_name_for(area)
-        route = "/" if i == 0 else f"/{kebab(comp)}"
+        route = "/" if (i == 0 and not root_taken) else f"/{kebab(comp)}"
         table.append({
             "key": area["key"],
             "req_ids": area.get("req_ids", []),
@@ -39,10 +41,21 @@ def route_table(areas: list[dict]) -> list[dict]:
     return table
 
 
-def build_integration(design: dict, areas: list[dict]) -> dict:
-    routes = route_table(areas)
+def build_integration(design: dict, areas: list[dict],
+                      existing_pages: list[dict] | None = None,
+                      existing_api: list[dict] | None = None) -> dict:
+    existing_pages = existing_pages or []
+    root_taken = any(p.get("route") == "/" for p in existing_pages)
+    routes = [dict(p) for p in existing_pages] + route_table(areas, root_taken=root_taken)
+    api = [dict(e) for e in (existing_api or [])]
+    seen = {(e.get("method"), e.get("path")) for e in api}
+    for a in (design.get("api") or []):
+        key = (a.get("method"), a.get("path"))
+        if key not in seen:
+            api.append(a)
+            seen.add(key)
     return {
-        "api": design.get("api") or [],
+        "api": api,
         "seed": design.get("seed") or {},
         "routes": routes,
         "data_ownership": design.get("data_ownership") or [],
@@ -56,7 +69,8 @@ def digest_integration(integration: dict) -> str:
         for a in integration.get("api", [])
     ) or "- (none)"
     route_lines = "\n".join(
-        f"- {r['route']} -> {r['area']} (reqs: {', '.join(r['req_ids'][:4])})"
+        f"- {r.get('route')} -> {r.get('area') or r.get('comp') or '?'} "
+        f"(reqs: {', '.join((r.get('req_ids') or [])[:4]) or 'earlier stage'})"
         for r in integration.get("routes", [])
     )
     seed = json.dumps(integration.get("seed", {}), ensure_ascii=False)

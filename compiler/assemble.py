@@ -22,7 +22,7 @@ def write_backend(out: Path, code: str) -> None:
 
 
 def write_frontend(out: Path, pages: list[tuple[str, str]],
-                   integration: dict) -> list[dict]:
+                   integration: dict, keep_comps: list[dict] | None = None) -> list[dict]:
     src = out / "frontend" / "src"
     pages_dir = src / "pages"
     pages_dir.mkdir(parents=True, exist_ok=True)
@@ -85,18 +85,22 @@ def write_frontend(out: Path, pages: list[tuple[str, str]],
         if isinstance(r, dict)
     }
 
+    keep = list(keep_comps or [])
     metas = []
+    for entry in keep:
+        metas.append({"comp": entry["comp"],
+                      "route": route_by_comp.get(entry["comp"], entry.get("route", "/"))})
     for comp, code in pages:
         (pages_dir / f"{comp}.tsx").write_text(code, encoding="utf-8")
         metas.append({"comp": comp, "route": route_by_comp.get(comp, "/")})
 
     lines = []
-    for comp, _ in pages:
-        lines.append(f"import {comp} from './pages/{comp}'")
+    for meta in metas:
+        lines.append(f"import {meta['comp']} from './pages/{meta['comp']}'")
     lines.append("")
     lines.append("const PAGES = [")
-    for m in metas:
-        lines.append(f"  {{ path: '{m['route']}', element: {m['comp']} }},")
+    for meta in metas:
+        lines.append(f"  {{ path: '{meta['route']}', element: {meta['comp']} }},")
     lines.append("]")
     imports_block = "\n".join(lines)
     app_code = (

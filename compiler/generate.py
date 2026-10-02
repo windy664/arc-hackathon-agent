@@ -116,19 +116,34 @@ Accessibility contract to respect: {contract}
 Return ONLY one fenced code block containing the full file content of `{comp}.tsx`."""
 
 
-def generate_design(client: ModelClient, atomics: list[dict]) -> dict:
+def generate_design(client: ModelClient, atomics: list[dict],
+                    existing_note: str = "") -> dict:
     prompt = BACKEND_SPEC_PROMPT.format(
         reqs=digest_requirements(atomics, 16000),
         scenarios=scenario_digest(atomics),
     )
+    if existing_note:
+        prompt += "\n\n" + existing_note + (
+            "\nDesign only the API additions the new requirements need; do not "
+            "drop existing endpoints from the design's api list — include both."
+        )
     return extract_json(client.chat(prompt, system=SYSTEM_PROMPT))
 
 
-def generate_backend(client: ModelClient, design: dict, atomics: list[dict]) -> str:
+def generate_backend(client: ModelClient, design: dict, atomics: list[dict],
+                     existing_src: str | None = None) -> str:
     prompt = BACKEND_CODE_PROMPT.format(
         design=json.dumps(design, ensure_ascii=False)[:12000],
         reqs=digest_requirements(atomics, 14000),
     )
+    if existing_src:
+        prompt += (
+            "\n\nEXTEND MODE: an earlier-stage backend already exists. Preserve "
+            "every existing endpoint's path, request and response shapes, and "
+            "seeded tables. Add the new endpoints on top of it. Return the "
+            "complete merged file.\n\nExisting index.js:\n"
+            + existing_src[:16000]
+        )
     return extract_code(client.chat(prompt, system=SYSTEM_PROMPT))
 
 

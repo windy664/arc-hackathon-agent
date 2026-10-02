@@ -7,6 +7,7 @@ from pathlib import Path
 from .agents import EngineerTeam, ReviewerTeam
 from .assemble import fallback_backend, fallback_home, write_backend, write_frontend
 from .config import BUDGET, MAX_REPAIR_AREAS, log
+from .extend import backend_covers, existing_context, inspect_app
 from .generate import (
     generate_backend,
     generate_design,
@@ -54,14 +55,31 @@ def run(source: Path, out: Path) -> None:
     client = ModelClient()
     out.mkdir(parents=True, exist_ok=True)
 
-    design = generate_design(client, atomics)
+    existing = inspect_app(out)
+    extend_mode = existing["has_app"]
+    if extend_mode:
+        log(f"extend mode: {len(existing['pages'])} existing pages, "
+            f"{len(existing['api'])} existing endpoints")
+
+    design = generate_design(client, atomics,
+                             existing_note=existing_context(existing) if extend_mode else "")
     log(f"design pages: {len(design.get('pages') or [])} api: {len(design.get('api') or [])} {BUDGET.status()}")
     reporter.design_done([a["id"] for a in atomics], "design complete")
 
-    backend_code = generate_backend(client, design, atomics)
-    if backend_code and "express" in backend_code:
+    existing_src = None
+    if extend_mode:
+        index = out / "backend" / "src" / "index.js"
+        if index.is_file():
+            existing_src = index.read_text(encoding="utf-8", errors="ignore")
+
+    backend_code = generate_backend(client, design, atomics, existing_src=existing_src)
+    if backend_code and "express" in backend_code and (
+        not extend_mode or backend_covers(existing["api"], backend_code)
+    ):
         write_backend(out, backend_code)
         log(f"backend written ({len(backend_code)} chars)")
+    elif extend_mode and existing_src:
+        log("backend regenerated output rejected; keeping existing backend")
     else:
         write_backend(out, fallback_backend())
         log("backend fallback used")
@@ -75,7 +93,11 @@ def run(source: Path, out: Path) -> None:
     if len(areas) > 10:
         areas = areas[:10]
 
-    integration = build_integration(design, areas)
+    integration = build_integration(
+        design, areas,
+        existing_pages=existing["pages"] if extend_mode else None,
+        existing_api=existing["api"] if extend_mode else None,
+    )
     log(f"integration: {len(integration['api'])} api routes, {len(integration['routes'])} pages")
 
     pages: list[tuple[str, str]] = []
@@ -98,7 +120,10 @@ def run(source: Path, out: Path) -> None:
         pages.append(("HomePage", fallback_home(contract)))
         comp_of_area[areas[0]["key"]] = "HomePage"
 
-    metas = write_frontend(out, pages, integration)
+    metas = write_frontend(
+        out, pages, integration,
+        keep_comps=existing["pages"] if extend_mode else None,
+    )
     log("frontend written")
 
     problems = verify_sources(out, contract, areas, comp_of_area)
