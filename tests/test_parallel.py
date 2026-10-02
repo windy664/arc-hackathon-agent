@@ -34,7 +34,7 @@ def _areas(n: int) -> list[dict]:
     ]
 
 
-def test_engineer_team_chunks_queues_and_preserves_order(monkeypatch) -> None:
+def test_engineer_team_pull_based_and_preserves_order(monkeypatch) -> None:
     monkeypatch.setenv("ARCBENCH_MOCK_MODEL", "1")
     from compiler import model as model_mod
 
@@ -45,8 +45,8 @@ def test_engineer_team_chunks_queues_and_preserves_order(monkeypatch) -> None:
 
     # order aligned with input
     assert [a["key"] for a, _, _ in results] == [a["key"] for a in areas]
-    # each engineer owns a disjoint sequential queue (2 of 6)
-    assert sorted(agent.built for agent in team.agents) == [2, 2, 2]
+    # pull-based: all work claimed, distribution intentionally uneven-ok
+    assert sum(agent.built for agent in team.agents) == 6
     # persistent conversations still produce per-area component names
     assert [comp for _, comp, _ in results] == [f"Page{i}" for i in range(6)]
     assert all(code for _, _, code in results)
@@ -65,4 +65,4 @@ def test_reviewer_team_chunks_and_orders(monkeypatch) -> None:
     verdicts = team.review_all(items)
     assert len(verdicts) == 5
     assert all(v.get("ok") is True for v in verdicts)
-    assert sorted(a.reviewed for a in team.agents) == [2, 3]
+    assert sum(a.reviewed for a in team.agents) == 5

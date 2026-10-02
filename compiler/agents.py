@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from .config import BUDGET
@@ -68,30 +69,30 @@ class EngineerTeam:
         ]
 
     def build_all(self, areas: list[dict]) -> list[tuple[dict, str, str]]:
-        """Chunk areas among agents; agents run side by side, queues stay serial."""
-        n = len(self.agents)
-        chunks = [areas[i::n] for i in range(n)]
-        collected: list[tuple[dict, str, str]] = []
-        with ThreadPoolExecutor(max_workers=n) as pool:
-            futures = [
-                pool.submit(self._run_queue, agent, chunk)
-                for agent, chunk in zip(self.agents, chunks)
-            ]
-            for fut in futures:
-                collected.extend(fut.result())
-        order = {id(a): i for i, a in enumerate(areas)}
-        collected.sort(key=lambda r: order[id(r[0])])
-        return collected
+        """Pull-based assignment: each engineer claims the next unclaimed area
+        whenever it comes free. Fast workers take more work; nothing stalls
+        behind a slow area. Results stay aligned with the input order.
+        """
+        queue: list[tuple[int, dict]] = list(enumerate(areas))
+        lock = threading.Lock()
+        results: dict[int, tuple[dict, str, str]] = {}
 
-    def _run_queue(self, agent: EngineerAgent,
-                   chunk: list[dict]) -> list[tuple[dict, str, str]]:
-        out = []
-        for area in chunk:
-            if not BUDGET.allow():
-                out.append((area, "", ""))
-                continue
-            out.append(agent.build(area))
-        return out
+        def worker(agent: EngineerAgent) -> None:
+            while True:
+                with lock:
+                    if not queue:
+                        return
+                    idx, area = queue.pop(0)
+                if not BUDGET.allow():
+                    results[idx] = (area, "", "")
+                    continue
+                results[idx] = agent.build(area)
+
+        with ThreadPoolExecutor(max_workers=len(self.agents)) as pool:
+            futures = [pool.submit(worker, agent) for agent in self.agents]
+            for fut in futures:
+                fut.result()
+        return [results[i] for i in range(len(areas))]
 
 
 class ReviewerAgent:
@@ -129,22 +130,21 @@ class ReviewerTeam:
         self.agents = [ReviewerAgent(client, i) for i in range(size)]
 
     def review_all(self, items: list[tuple[dict, object, object]]) -> list[dict]:
-        n = len(self.agents)
-        chunks = [items[i::n] for i in range(n)]
-        collected: list[tuple[int, dict]] = []
-        with ThreadPoolExecutor(max_workers=n) as pool:
-            futures = []
-            for agent, chunk in zip(self.agents, chunks):
-                futures.append(pool.submit(self._run_queue, agent, chunk))
-            for fut in futures:
-                collected.extend(fut.result())
-        collected.sort(key=lambda r: r[0])
-        return [verdict for _, verdict in collected]
+        """Pull-based assignment, same as the engineer team."""
+        queue: list[tuple[int, tuple[dict, object, object]]] = list(enumerate(items))
+        lock = threading.Lock()
+        results: dict[int, dict] = {}
 
-    def _run_queue(self, agent: ReviewerAgent,
-                   chunk: list[tuple[dict, object, object]]) -> list[tuple[int, dict]]:
-        out = []
-        for item in chunk:
-            area, reference, screenshot = item
-            out.append((id(area), agent.review(area, reference, screenshot)))
-        return out
+        def worker(agent: ReviewerAgent) -> None:
+            while True:
+                with lock:
+                    if not queue:
+                        return
+                    idx, (area, reference, screenshot) = queue.pop(0)
+                results[idx] = agent.review(area, reference, screenshot)
+
+        with ThreadPoolExecutor(max_workers=len(self.agents)) as pool:
+            futures = [pool.submit(worker, agent) for agent in self.agents]
+            for fut in futures:
+                fut.result()
+        return [results[i] for i in range(len(items))]
